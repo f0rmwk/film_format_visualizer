@@ -21,7 +21,7 @@
     <!-- Component source (inline so it works via file:// and Safari) -->
     <script type="text/babel" data-presets="react">
       /* global React */
-      const { useMemo, useState } = React;
+      const { useMemo, useState, useEffect, useRef } = React;
 
       // Zero‑dependency version (no external UI libs). Plain React + Tailwind + native inputs.
       // This version fixes: (1) overlay opacity vs outline visibility, (2) IMAX perf visibility,
@@ -73,6 +73,7 @@
         const [controlsCollapsed, setControlsCollapsed] = useState(false);
         const [sortOverlay, setSortOverlay] = useState("large-top");
         const [detailsCollapsed, setDetailsCollapsed] = useState(true);
+        const overlayScrollRef = useRef(null);
 
         const selected = useMemo(() => formats.filter((f) => activeIds.includes(f.id)), [formats, activeIds]);
 
@@ -91,6 +92,19 @@
           }
           return { w, h };
         }, [selected]);
+
+        // Center the overlay scroll container on content/size changes
+        useEffect(() => {
+          if (mode !== 'overlay') return;
+          const el = overlayScrollRef.current;
+          if (!el) return;
+          requestAnimationFrame(() => {
+            const targetLeft = Math.max(0, (el.scrollWidth - el.clientWidth) / 2);
+            const targetTop = Math.max(0, (el.scrollHeight - el.clientHeight) / 2);
+            el.scrollLeft = targetLeft;
+            el.scrollTop = targetTop;
+          });
+        }, [mode, scale, maxGate.w, maxGate.h, controlsCollapsed, selectedSorted.length]);
 
         const handleToggle = (id) => {
           setActiveIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -288,7 +302,7 @@
             <div className={`col-span-12 ${controlsCollapsed ? "md:col-span-12" : "md:col-span-7 lg:col-span-8"} min-w-0 border rounded-2xl p-4 bg-white shadow-sm`}>
               <h2 className="text-lg font-semibold mb-4">Visualizer</h2>
               {mode === "overlay" ? (
-                <div className="relative w-full overflow-auto border rounded-xl p-4 bg-white min-h-[320px]">
+                <div ref={overlayScrollRef} className="relative w-full overflow-auto border rounded-xl p-4 bg-white min-h-[320px]">
                   <div className="relative" style={{ width: Math.max(320, maxGate.w * scale + 48), height: Math.max(240, maxGate.h * scale + 48) }}>
                     <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
                       {selectedSorted.map((fmt) => (
