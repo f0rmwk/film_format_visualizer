@@ -1,0 +1,379 @@
+/* global React */
+// Using global React from UMD for no-build setup
+const { useMemo, useState } = React;
+
+// Zero‑dependency version (no external UI libs). Plain React + Tailwind + native inputs.
+// This version fixes: (1) overlay opacity vs outline visibility, (2) IMAX perf visibility,
+// (3) grid crowding via collapsible controls + responsive col spans, (4) sliver issue by
+// ensuring grid children can shrink (min-w-0) and giving the visualizer a minimum height.
+
+// --- Data (common references; values are approximate industry standards) ---
+// Notes:
+//  - Image areas are camera/negative apertures (approx.). Projection apertures differ.
+//  - Perforations shown are schematic (count & orientation), not exact pitch/profile.
+//  - IMAX & VistaVision are horizontal transport; others are vertical by default.
+
+const BASE_FORMATS = [
+  { id: "super8", label: "Super 8", gaugeMm: 8, imageMm: { w: 5.79, h: 4.01 }, orientation: "vertical", perfsPerFrame: 1, perfDirection: "vertical", notes: "Single-perf (modern cartridges)." },
+  { id: "reg8", label: "Regular 8 (Double 8)", gaugeMm: 8, imageMm: { w: 4.8, h: 3.5 }, orientation: "vertical", perfsPerFrame: 1, perfDirection: "vertical", notes: "Double 8 exposed twice; shown here as single frame." },
+  { id: "16mm", label: "16mm", gaugeMm: 16, imageMm: { w: 10.26, h: 7.49 }, orientation: "vertical", perfsPerFrame: 1, perfDirection: "vertical", notes: "Standard 16 (1-perf)." },
+  { id: "super16", label: "Super 16", gaugeMm: 16, imageMm: { w: 12.52, h: 7.41 }, orientation: "vertical", perfsPerFrame: 1, perfDirection: "vertical", notes: "Wider image uses soundtrack area; 1-perf." },
+  { id: "35_academy", label: "35mm Academy (4-perf)", gaugeMm: 35, imageMm: { w: 21.95, h: 16.0 }, orientation: "vertical", perfsPerFrame: 4, perfDirection: "vertical", notes: "Classic Academy aperture ~1.37:1." },
+  { id: "35_full", label: "35mm Full/Silent (4-perf)", gaugeMm: 35, imageMm: { w: 24.89, h: 18.67 }, orientation: "vertical", perfsPerFrame: 4, perfDirection: "vertical", notes: "Full aperture (silent era / Super35 base)." },
+  { id: "35_super35_3perf", label: "Super 35 (3-perf)", gaugeMm: 35, imageMm: { w: 24.89, h: 13.97 }, orientation: "vertical", perfsPerFrame: 3, perfDirection: "vertical", notes: "Popular for 1.78/1.85; saves stock." },
+  { id: "35_techniscope", label: "35mm Techniscope (2-perf)", gaugeMm: 35, imageMm: { w: 22.05, h: 9.47 }, orientation: "vertical", perfsPerFrame: 2, perfDirection: "vertical", notes: "2-perf for 2.39:1 blow-up." },
+  { id: "vistavision", label: "VistaVision (8-perf H)", gaugeMm: 35, imageMm: { w: 37.72, h: 24.92 }, orientation: "horizontal", perfsPerFrame: 8, perfDirection: "horizontal", notes: "Horizontal 35mm; near still-35 ‘full frame’." },
+  { id: "70mm_5perf", label: "65/70mm (5-perf)", gaugeMm: 70, imageMm: { w: 48.56, h: 22.10 }, orientation: "vertical", perfsPerFrame: 5, perfDirection: "vertical", notes: "65mm negative → 70mm print; ~2.20:1." },
+  { id: "imax_1570", label: "IMAX 15/70 (H)", gaugeMm: 70, imageMm: { w: 70.41, h: 52.63 }, orientation: "horizontal", perfsPerFrame: 15, perfDirection: "horizontal", notes: "Horizontal 70mm; 15 perfs per frame." },
+];
+
+// Additional formats
+const EXTRA_FORMATS = [
+  { id: "35_185", label: "35mm 1.85 Hard‑Matte (4‑perf)", gaugeMm: 35, imageMm: { w: 21.95, h: 11.86 }, orientation: "vertical", perfsPerFrame: 4, perfDirection: "vertical", notes: "Hard‑matted for 1.85:1 projection." },
+  { id: "35_166", label: "35mm 1.66 Hard‑Matte (4‑perf)", gaugeMm: 35, imageMm: { w: 21.95, h: 13.22 }, orientation: "vertical", perfsPerFrame: 4, perfDirection: "vertical", notes: "European 1.66:1 extraction." },
+  { id: "35_anamorphic_4perf", label: "35mm Anamorphic 2× (4‑perf)", gaugeMm: 35, imageMm: { w: 21.95, h: 18.60 }, orientation: "vertical", perfsPerFrame: 4, perfDirection: "vertical", notes: "2× squeeze on negative → ~2.39:1 projection." },
+  { id: "s35_239_extract", label: "Super 35 (2.39 extract)", gaugeMm: 35, imageMm: { w: 24.89, h: 10.41 }, orientation: "vertical", perfsPerFrame: 4, perfDirection: "vertical", notes: "Common 2.39 extraction from S35." },
+  { id: "up70_125x", label: "Ultra Panavision 70 (1.25×)", gaugeMm: 70, imageMm: { w: 52.50, h: 23.00 }, orientation: "vertical", perfsPerFrame: 5, perfDirection: "vertical", notes: "65mm negative with 1.25× squeeze → ~2.76:1." },
+];
+
+// Utility: stable HSL color from id
+function colorFor(id) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 360;
+  return `hsl(${h} 70% 55%)`;
+}
+
+function Aspect({ w, h }) {
+  const r = (w / h).toFixed(3);
+  return <span className="tabular-nums">{r}:1</span>;
+}
+
+function FilmOverlayVisualizer() {
+  const [formats, setFormats] = useState([...BASE_FORMATS, ...EXTRA_FORMATS]);
+  const [activeIds, setActiveIds] = useState([...BASE_FORMATS, ...EXTRA_FORMATS].map((f) => f.id));
+  const [scale, setScale] = useState(3); // px per mm (default 3)
+  const [showFilmStock, setShowFilmStock] = useState(true);
+  const [showPerfs, setShowPerfs] = useState(true);
+  const [fillOpacity, setFillOpacity] = useState(0.32); // separate from stroke opacity (fixed at 1)
+  const [strokeWidth, setStrokeWidth] = useState(2);
+  const [mode, setMode] = useState("grid"); // overlay | grid (default grid)
+  const [controlsCollapsed, setControlsCollapsed] = useState(false);
+  const [sortOverlay, setSortOverlay] = useState("large-top"); // none | small-top | large-top (default large-top)
+  const [detailsCollapsed, setDetailsCollapsed] = useState(true); // collapse Format Details by default
+
+  const selected = useMemo(() => formats.filter((f) => activeIds.includes(f.id)), [formats, activeIds]);
+
+  const area = (f) => f.imageMm.w * f.imageMm.h;
+  const selectedSorted = useMemo(() => {
+    if (sortOverlay === "small-top") return [...selected].sort((a, b) => area(a) - area(b));
+    if (sortOverlay === "large-top") return [...selected].sort((a, b) => area(b) - area(a));
+    return selected;
+  }, [selected, sortOverlay]);
+
+  const maxGate = useMemo(() => {
+    let w = 0, h = 0;
+    for (const f of selected) {
+      w = Math.max(w, f.orientation === "horizontal" ? Math.max(f.imageMm.w + f.gaugeMm * 0.4, f.gaugeMm) : f.gaugeMm);
+      h = Math.max(h, f.orientation === "horizontal" ? f.gaugeMm : Math.max(f.imageMm.h + f.gaugeMm * 0.4, f.gaugeMm));
+    }
+    return { w, h };
+  }, [selected]);
+
+  const handleToggle = (id) => {
+    setActiveIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const updateFormatValue = (id, key, subkey, value) => {
+    setFormats((prev) =>
+      prev.map((f) => {
+        if (f.id !== id) return f;
+        if (subkey) return { ...f, [key]: { ...f[key], [subkey]: value } };
+        return { ...f, [key]: value };
+      })
+    );
+  };
+
+  const resetFormatsToDefault = () => {
+    const defaults = [...BASE_FORMATS, ...EXTRA_FORMATS];
+    setFormats(defaults);
+    setActiveIds(defaults.map((f) => f.id));
+  };
+
+  // Inner component: separate fill/stroke opacity; larger IMAX/VV perf height for visibility
+  function FilmFrame({ fmt, scale, showFilmStock, showPerfs }) {
+    const { imageMm, gaugeMm, orientation, perfsPerFrame, perfDirection } = fmt;
+
+    const sideMargin = Math.max((gaugeMm - imageMm.w) / 2, gaugeMm * 0.08);
+    const topBottomMargin = Math.max(((perfDirection === "vertical" ? perfsPerFrame : 1) * 4.8 - imageMm.h) / 2, gaugeMm * 0.06);
+
+    const filmW = orientation === "vertical" ? gaugeMm : imageMm.w + sideMargin * 2;
+    const filmH = orientation === "vertical" ? imageMm.h + topBottomMargin * 2 : gaugeMm;
+
+    const outerW = filmW;
+    const outerH = filmH;
+    const gateX = (outerW - imageMm.w) / 2;
+    const gateY = (outerH - imageMm.h) / 2;
+
+    const isIMAX = fmt.id === "imax_1570";
+    const perfSize = perfDirection === "vertical"
+      ? { w: gaugeMm * 0.09, h: outerH * 0.06 }
+      : (isIMAX
+          ? { w: gaugeMm * 0.07, h: outerH * 0.06 } // IMAX perfs smaller for accuracy
+          : { w: gaugeMm * 0.09, h: outerH * 0.10 });
+    const perfRadius = Math.min(perfSize.w, perfSize.h) * 0.2;
+
+    const topPerfs = [], bottomPerfs = [], leftPerfs = [], rightPerfs = [];
+    if (showPerfs) {
+      if (perfDirection === "vertical") {
+        const usable = outerH - 2 * perfSize.h * 0.6;
+        for (let i = 0; i < perfsPerFrame; i++) {
+          const t = perfsPerFrame === 1 ? 0.5 : i / (perfsPerFrame - 1);
+          const y = perfSize.h * 0.6 + t * usable - perfSize.h / 2;
+          leftPerfs.push([perfSize.w * 0.4, y]);
+          rightPerfs.push([outerW - perfSize.w * 1.4, y]);
+        }
+      } else {
+        const usable = outerW - 2 * perfSize.w * 0.6;
+        for (let i = 0; i < perfsPerFrame; i++) {
+          const t = perfsPerFrame === 1 ? 0.5 : i / (perfsPerFrame - 1);
+          const x = perfSize.w * 0.6 + t * usable - perfSize.w / 2;
+          topPerfs.push([x, perfSize.h * 0.4]);
+          bottomPerfs.push([x, outerH - perfSize.h * 1.4]);
+        }
+      }
+    }
+
+    const toPx = (mm) => mm * scale;
+    const color = colorFor(fmt.id);
+
+    return (
+      <svg
+        className="overflow-visible"
+        width={toPx(outerW)}
+        height={toPx(outerH)}
+        viewBox={`0 0 ${outerW} ${outerH}`}
+        aria-label={`${fmt.label} film frame`}
+      >
+        {showFilmStock && (
+          <rect x={0} y={0} width={outerW} height={outerH} rx={gaugeMm * 0.06} style={{ fill: "#e7e5e4" }} />
+        )}
+
+        {showPerfs && (
+          <g>
+            {[...topPerfs, ...bottomPerfs, ...leftPerfs, ...rightPerfs].map((p, idx) => (
+              <rect key={idx} x={p[0]} y={p[1]} width={perfSize.w} height={perfSize.h} rx={perfRadius} style={{ fill: "#fff", stroke: "#cbd5e1", strokeWidth: 0.4 }} />
+            ))}
+          </g>
+        )}
+
+        <rect
+          x={gateX}
+          y={gateY}
+          width={imageMm.w}
+          height={imageMm.h}
+          style={{
+            fill: color,
+            fillOpacity: fillOpacity,
+            stroke: color,
+            strokeOpacity: 1,
+            strokeWidth: strokeWidth,
+            vectorEffect: "non-scaling-stroke",
+          }}
+        />
+      </svg>
+    );
+  }
+
+  return (
+    <div className="p-6 grid gap-6 md:grid-cols-12">
+      {/* Controls (collapsible) */}
+      {!controlsCollapsed ? (
+        <div className="col-span-12 md:col-span-5 lg:col-span-4 min-w-0 border rounded-2xl p-4 bg-white shadow-sm relative">
+          <button
+            onClick={() => setControlsCollapsed(true)}
+            className="absolute right-3 top-3 px-2 py-1 text-xs border rounded-md"
+            title="Collapse controls"
+          >Hide</button>
+          <h2 className="text-lg font-semibold mb-4">Controls</h2>
+
+          {/* Scale */}
+          <label className="block text-sm mb-1" htmlFor="scale">Scale (px per mm)</label>
+          <div className="flex items-center gap-3 mb-4">
+            <input id="scale" type="range" min={2} max={16} step={1} value={scale} onChange={(e) => setScale(parseInt(e.target.value, 10))} className="w-full" />
+            <span className="w-10 text-right tabular-nums">{scale}</span>
+          </div>
+
+          {/* Switches */}
+          <div className="flex items-center justify-between mb-4">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={showFilmStock} onChange={(e) => setShowFilmStock(e.target.checked)} />
+              Show film stock
+            </label>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={showPerfs} onChange={(e) => setShowPerfs(e.target.checked)} />
+              Show perfs
+            </label>
+          </div>
+
+          {/* Fill opacity & stroke */}
+          <label className="block text-sm mb-1" htmlFor="fill">Fill opacity</label>
+          <div className="flex items-center gap-3 mb-4">
+            <input id="fill" type="range" min={0} max={0.9} step={0.01} value={fillOpacity} onChange={(e) => setFillOpacity(parseFloat(e.target.value))} className="w-full" />
+            <span className="w-14 text-right tabular-nums">{fillOpacity.toFixed(2)}</span>
+          </div>
+
+          <label className="block text-sm mb-1" htmlFor="strokeW">Outline (stroke) width</label>
+          <div className="flex items-center gap-3 mb-4">
+            <input id="strokeW" type="range" min={0.5} max={4} step={0.5} value={strokeWidth} onChange={(e) => setStrokeWidth(parseFloat(e.target.value))} className="w-full" />
+            <span className="w-12 text-right tabular-nums">{strokeWidth.toFixed(1)}</span>
+          </div>
+
+          {/* Overlay order (only for Overlay mode) */}
+          {mode === "overlay" && (
+            <div className="mb-4">
+              <div className="text-sm mb-1">Overlay order</div>
+              <div className="flex gap-2 text-sm">
+                <button onClick={() => setSortOverlay("none")} className={`px-3 py-1 rounded-md border ${sortOverlay === "none" ? "bg-black text-white" : "bg-white"}`}>As selected</button>
+                <button onClick={() => setSortOverlay("small-top")} className={`px-3 py-1 rounded-md border ${sortOverlay === "small-top" ? "bg-black text-white" : "bg-white"}`}>Small → Top</button>
+                <button onClick={() => setSortOverlay("large-top")} className={`px-3 py-1 rounded-md border ${sortOverlay === "large-top" ? "bg-black text-white" : "bg-white"}`}>Large → Top</button>
+              </div>
+            </div>
+          )}
+
+          {/* Mode */}
+          <div className="mb-4 flex gap-2">
+            <button onClick={() => setMode("overlay")} className={`px-3 py-1 rounded-md border ${mode === "overlay" ? "bg-black text-white" : "bg-white"}`}>Overlay</button>
+            <button onClick={() => setMode("grid")} className={`px-3 py-1 rounded-md border ${mode === "grid" ? "bg-black text-white" : "bg-white"}`}>Grid</button>
+          </div>
+
+          {/* Formats list */}
+          <div className="space-y-2 max-h-72 overflow-auto pr-1">
+            <div className="flex items-center justify-between">
+              <div className="text-sm font-medium">Formats</div>
+              <div className="flex gap-2">
+                <button className="px-2 py-1 text-xs border rounded-md" onClick={() => setActiveIds(formats.map((f) => f.id))}>Select all</button>
+                <button className="px-2 py-1 text-xs border rounded-md" onClick={() => setActiveIds([])}>Clear</button>
+                <button
+                  className="px-2 py-1 text-xs border rounded-md"
+                  onClick={() =>
+                    setActiveIds((prev) => {
+                      const current = new Set(prev);
+                      return formats.map((f) => f.id).filter((id) => !current.has(id));
+                    })
+                  }
+                >
+                  Invert
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {formats.map((f) => (
+                <label key={f.id} className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={activeIds.includes(f.id)} onChange={() => handleToggle(f.id)} />
+                  <span className="truncate" title={f.label}>{f.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : (
+        // Collapsed: don't reserve a grid column; show a small bar above
+        <div className="col-span-12">
+          <button onClick={() => setControlsCollapsed(false)} className="px-3 py-1 border rounded-md mb-2">Show controls</button>
+        </div>
+      )}
+
+      {/* Visualizer */}
+      <div className={`col-span-12 ${controlsCollapsed ? "md:col-span-12" : "md:col-span-7 lg:col-span-8"} min-w-0 border rounded-2xl p-4 bg-white shadow-sm`}>
+        <h2 className="text-lg font-semibold mb-4">Visualizer</h2>
+        {mode === "overlay" ? (
+          <div className="relative w-full overflow-auto border rounded-xl p-4 bg-white min-h-[320px]">
+            <div className="relative" style={{ width: Math.max(320, maxGate.w * scale + 48), height: Math.max(240, maxGate.h * scale + 48) }}>
+              <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+                {selectedSorted.map((fmt) => (
+                  <div key={fmt.id} className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2" title={fmt.label}>
+                    <FilmFrame fmt={fmt} scale={scale} showFilmStock={showFilmStock} showPerfs={showPerfs} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="w-full overflow-auto" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem' }}>
+            {selected.map((fmt) => (
+              <div key={fmt.id} className="flex flex-col items-center gap-2">
+                <FilmFrame fmt={fmt} scale={scale} showFilmStock={showFilmStock} showPerfs={showPerfs} />
+                <div className="text-center text-sm">
+                  <div className="font-medium">{fmt.label}</div>
+                  <div className="text-stone-600">{fmt.imageMm.w.toFixed(2)} × {fmt.imageMm.h.toFixed(2)} mm (<Aspect w={fmt.imageMm.w} h={fmt.imageMm.h} />)</div>
+                  <div className="text-stone-500">{fmt.perfsPerFrame} perf{fmt.perfsPerFrame !== 1 ? "s" : ""} / frame • {fmt.orientation === "horizontal" ? "Horizontal" : "Vertical"}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Editable table (collapsible) */}
+      {detailsCollapsed ? (
+        <div className="col-span-12">
+          <button onClick={() => setDetailsCollapsed(false)} className="px-3 py-1 border rounded-md">Show format details</button>
+        </div>
+      ) : (
+        <div className="col-span-12 border rounded-2xl p-4 bg-white shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold">Format Details & Edits</h2>
+            <div className="flex gap-2">
+              <button onClick={resetFormatsToDefault} className="px-3 py-1 border rounded-md">Reset to defaults</button>
+              <button onClick={() => setDetailsCollapsed(true)} className="px-3 py-1 border rounded-md">Hide</button>
+            </div>
+          </div>
+          <div className="overflow-x-auto -mx-2 px-2">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-stone-500">
+                  <th className="py-2">Format</th>
+                  <th className="py-2">Gauge</th>
+                  <th className="py-2">Image W (mm)</th>
+                  <th className="py-2">Image H (mm)</th>
+                  <th className="py-2">Aspect</th>
+                  <th className="py-2">Perfs / frame</th>
+                  <th className="py-2">Transport</th>
+                  <th className="py-2">Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {formats.map((f) => (
+                  <tr key={f.id} className="border-t">
+                    <td className="py-2 font-medium">{f.label}</td>
+                    <td className="py-2 tabular-nums">{f.gaugeMm} mm</td>
+                    <td className="py-2"><input className="w-24 border rounded px-2 py-1" type="number" step="0.01" value={f.imageMm.w} onChange={(e) => updateFormatValue(f.id, "imageMm", "w", parseFloat(e.target.value) || 0)} /></td>
+                    <td className="py-2"><input className="w-24 border rounded px-2 py-1" type="number" step="0.01" value={f.imageMm.h} onChange={(e) => updateFormatValue(f.id, "imageMm", "h", parseFloat(e.target.value) || 0)} /></td>
+                    <td className="py-2 text-stone-600"><Aspect w={f.imageMm.w} h={f.imageMm.h} /></td>
+                    <td className="py-2"><input className="w-20 border rounded px-2 py-1" type="number" value={f.perfsPerFrame} onChange={(e) => updateFormatValue(f.id, "perfsPerFrame", null, parseInt(e.target.value || "0", 10))} /></td>
+                    <td className="py-2">
+                      <select className="px-2 py-1 border rounded-md" value={f.orientation} onChange={(e) => updateFormatValue(f.id, "orientation", null, e.target.value)}>
+                        <option value="vertical">Vertical</option>
+                        <option value="horizontal">Horizontal</option>
+                      </select>
+                    </td>
+                    <td className="py-2 text-stone-600">{f.notes}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-4 text-xs text-stone-500 leading-relaxed">
+            <p><strong>Legend & caveats:</strong> Gate sizes are typical camera/negative image areas. Projection and blow‑up apertures differ. Perforations shown are schematic (count & orientation) rather than exact pitch or profile (BH, KS, IMAX).</p>
+            <p className="mt-2"><strong>Tip:</strong> Use <em>Overlay</em> + "Small → Top" or "Large → Top" to control which outlines stay most visible. Reduce Fill opacity to make overlays translucent.</p>
+            <p className="mt-2"><strong>IMAX note:</strong> 15/70 values treat the longer dimension as along-transport; physical film width is ~70 mm.</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Expose globally for mounting without a bundler
+window.FilmOverlayVisualizer = FilmOverlayVisualizer;
