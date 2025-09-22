@@ -64,7 +64,7 @@ function FilmFormatVisualizer() {
   const interactiveRef = useRef(null);
   const dragStateRef = useRef(null);
   const [positions, setPositions] = useState({}); // id -> {x, y}
-  const [interactiveOpacity, setInteractiveOpacity] = useState(0.32);
+  const [interactiveOpacity, setInteractiveOpacity] = useState(0.7);
   const zCounterRef = useRef(1);
   const [zIndexMap, setZIndexMap] = useState({}); // id -> zIndex
 
@@ -332,7 +332,7 @@ function FilmFormatVisualizer() {
 
           {mode === "interactive" && (
             <div className="mb-4">
-              <label className="block text-sm mb-1" htmlFor="interactiveFill">Interactive fill opacity</label>
+              <label className="block text-sm mb-1" htmlFor="interactiveFill">Interactive opacity</label>
               <div className="flex items-center gap-3">
                 <input id="interactiveFill" type="range" min={0} max={0.9} step={0.01} value={interactiveOpacity} onChange={(e) => setInteractiveOpacity(parseFloat(e.target.value))} className="w-full" />
                 <span className="w-14 text-right tabular-nums">{interactiveOpacity.toFixed(2)}</span>
