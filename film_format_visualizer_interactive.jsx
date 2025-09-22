@@ -71,6 +71,8 @@ function FilmFormatVisualizer() {
   const [interactiveCols, setInteractiveCols] = useState(3);
   const [isMobile, setIsMobile] = useState(false);
   const [fitScale, setFitScale] = useState(null); // auto scale for mobile/interactive
+  const [canvasScale, setCanvasScale] = useState(1);
+  const [viewportW, setViewportW] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
   const STEP_X = 260; // approx card width + gap
   const STEP_Y = 240; // approx card height + gap
   const [ghostSize, setGhostSize] = useState({ w: 800, h: 500 });
@@ -188,6 +190,12 @@ function FilmFormatVisualizer() {
     return () => window.removeEventListener('resize', updateMobile);
   }, []);
 
+  useEffect(() => {
+    const onResize = () => setViewportW(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
   // Compute an auto-fit scale on mobile so frames don’t overflow width
   useEffect(() => {
     if (!isMobile || mode !== 'interactive') {
@@ -211,6 +219,17 @@ function FilmFormatVisualizer() {
     setFitScale(s);
   }, [isMobile, mode, selected, scale]);
 
+  // Compute desktop canvas scale to keep cards inside visible area (fit width)
+  useEffect(() => {
+    if (isMobile || mode !== 'interactive') { setCanvasScale(1); return; }
+    const container = interactiveRef.current;
+    const cw = container ? container.clientWidth : viewportW;
+    const baseW = Math.max(320, posBounds.w + 24);
+    if (!cw || baseW <= 0) { setCanvasScale(1); return; }
+    const s = Math.min(1, (cw - 16) / baseW);
+    setCanvasScale(s);
+  }, [isMobile, mode, posBounds.w, viewportW]);
+
   const onDragStart = (id) => (e) => {
     if (mode !== "interactive") return;
     const container = interactiveRef.current;
@@ -221,11 +240,15 @@ function FilmFormatVisualizer() {
     const clientY = isTouch ? (e.touches && e.touches[0]?.clientY) : e.clientY;
     if (clientX == null || clientY == null) return;
     const pos = positions[id] || { x: 0, y: 0 };
+    const scaleF = isMobile ? 1 : (canvasScale || 1);
+    const localX = (clientX - rect.left) / scaleF;
+    const localY = (clientY - rect.top) / scaleF;
     dragStateRef.current = {
       id,
-      offsetX: clientX - (rect.left + pos.x),
-      offsetY: clientY - (rect.top + pos.y),
+      offsetX: localX - pos.x,
+      offsetY: localY - pos.y,
       isTouch,
+      scaleAtStart: scaleF,
     };
     // Bring to front
     const nextZ = (zCounterRef.current || 1) + 1;
@@ -251,8 +274,11 @@ function FilmFormatVisualizer() {
     const clientX = isTouch ? (e.touches && e.touches[0]?.clientX) : e.clientX;
     const clientY = isTouch ? (e.touches && e.touches[0]?.clientY) : e.clientY;
     if (clientX == null || clientY == null) return;
-    let x = clientX - rect.left - s.offsetX;
-    let y = clientY - rect.top - s.offsetY;
+    const scaleF = isMobile ? 1 : (s.scaleAtStart || canvasScale || 1);
+    const localX = (clientX - rect.left) / scaleF;
+    const localY = (clientY - rect.top) / scaleF;
+    let x = localX - s.offsetX;
+    let y = localY - s.offsetY;
     x = Math.max(0, x);
     y = Math.max(0, y);
     setPositions((prev) => ({ ...prev, [s.id]: { x, y } }));
@@ -546,7 +572,8 @@ function FilmFormatVisualizer() {
             </div>
           ) : (
             <div className="relative w-full overflow-auto border rounded-xl p-4 bg-white" ref={interactiveRef} style={{ touchAction: 'none' }}>
-              <div className="relative" style={{ width: Math.max(320, posBounds.w + 24), height: Math.max(240, posBounds.h + 24) }}>
+              <div style={{ position: 'relative', width: Math.max(320, (posBounds.w + 24) * canvasScale), height: Math.max(240, (posBounds.h + 24) * canvasScale) }}>
+                <div className="relative" style={{ width: Math.max(320, posBounds.w + 24), height: Math.max(240, posBounds.h + 24), transform: `scale(${canvasScale})`, transformOrigin: 'top left' }}>
                 {selected.map((fmt) => {
                   const pos = positions[fmt.id] || { x: 0, y: 0 };
                   return (
@@ -567,6 +594,7 @@ function FilmFormatVisualizer() {
                     </div>
                   );
                 })}
+                </div>
               </div>
             </div>
           )
