@@ -491,7 +491,7 @@ function FilmFormatVisualizer() {
           )}
 
           {/* Formats list */}
-          <div className="space-y-2 max-h-72 overflow-auto pr-1">
+      <div className="space-y-2 pr-1">
             <div className="flex items-center justify-between">
               <div className="text-sm font-medium">Formats</div>
               <div className="flex gap-2">
