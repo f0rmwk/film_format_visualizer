@@ -439,7 +439,7 @@ function FilmFormatVisualizer() {
               style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none', inset: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem' }}
             >
               {selected.map((fmt) => (
-                <div key={`ghost-${fmt.id}`} className="flex flex-col items-center gap-2">
+                <div key={`ghost-${fmt.id}`} className="flex flex-col items-center gap-2 p-2 rounded-lg border">
                   <FilmFrame fmt={fmt} scale={scale} showFilmStock={showFilmStock} showPerfs={showPerfs} />
                   <div className="text-center text-sm">
                     <div className="font-medium">{fmt.label}</div>
