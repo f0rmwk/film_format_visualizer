@@ -4,6 +4,8 @@ Interactive visualizer comparing common motion‑picture film formats. Explore n
 
 Live demo: https://f0rmwk.github.io/film_format_visualizer/
 
+Note: Touch is supported, but the experience works best on desktop/laptop screens.
+
 ## Preview
 
 <table>
