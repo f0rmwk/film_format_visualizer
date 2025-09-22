@@ -483,8 +483,8 @@ function FilmFormatVisualizer() {
             ))}
           </div>
         ) : (
-          <div className="relative w-full overflow-auto border rounded-xl p-4 bg-white min-h-[420px]" ref={interactiveRef}>
-            <div className="relative" style={{ width: Math.max(colsForCanvas * STEP_X + 100, posBounds.w + 100), height: Math.max(rowsForCanvas * STEP_Y + 100, posBounds.h + 100) }}>
+          <div className="relative w-full overflow-auto border rounded-xl p-4 bg-white" ref={interactiveRef}>
+            <div className="relative" style={{ width: Math.max(320, posBounds.w + 24), height: Math.max(240, posBounds.h + 24) }}>
               {selected.map((fmt) => {
                 const pos = positions[fmt.id] || { x: 0, y: 0 };
                 return (

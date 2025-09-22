@@ -465,8 +465,8 @@
                   ))}
                 </div>
               ) : (
-                <div className="relative w-full overflow-auto border rounded-xl p-4 bg-white min-h-[420px]" ref={interactiveRef}>
-                  <div className="relative" style={{ width: (() => { let maxX=0; selected.forEach(fmt => { const p=positions[fmt.id]; if (p) maxX=Math.max(maxX,p.x);}); return Math.max((interactiveCols || 3) * STEP_X + 100, maxX + STEP_X + 100); })(), height: (() => { let maxY=0; selected.forEach(fmt => { const p=positions[fmt.id]; if (p) maxY=Math.max(maxY,p.y);}); return Math.max(Math.max(1, Math.ceil(selected.length / (interactiveCols || 3))) * STEP_Y + 100, maxY + STEP_Y + 100); })() }}>
+                <div className="relative w-full overflow-auto border rounded-xl p-4 bg-white" ref={interactiveRef}>
+                  <div className="relative" style={{ width: (() => { let maxX=0; selected.forEach(fmt => { const p=positions[fmt.id]; if (p) maxX=Math.max(maxX,p.x);}); return Math.max(320, maxX + STEP_X + 24); })(), height: (() => { let maxY=0; selected.forEach(fmt => { const p=positions[fmt.id]; if (p) maxY=Math.max(maxY,p.y);}); return Math.max(240, maxY + STEP_Y + 24); })() }}>
                     {selected.map((fmt) => {
                       const pos = positions[fmt.id] || { x: 0, y: 0 };
                       return (
