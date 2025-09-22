@@ -74,6 +74,7 @@ function FilmFormatVisualizer() {
   const [ghostSize, setGhostSize] = useState({ w: 800, h: 500 });
   const LOCAL_STORAGE_KEY = 'ffv_interactive_positions_default_v1';
   const [defaultApplied, setDefaultApplied] = useState(false);
+  const [fileApplied, setFileApplied] = useState(false);
 
   const selected = useMemo(() => formats.filter((f) => activeIds.includes(f.id)), [formats, activeIds]);
 
@@ -134,31 +135,59 @@ function FilmFormatVisualizer() {
     });
   };
 
-  // Initialize layout by measuring ghost grid (matches Grid mode) or applying saved default
+  // Initialize layout by measuring ghost grid (matches Grid mode) or applying saved default/file
   useEffect(() => {
     if (mode !== "interactive") return;
-    if (!defaultApplied) {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (saved) {
+    // 1) attempt external file once per session
+    (async () => {
+      if (!fileApplied) {
         try {
-          const data = JSON.parse(saved);
-          const factor = data?.scale ? (scale / data.scale) : 1;
-          const next = {};
-          selected.forEach((fmt) => {
-            const p = data.positions?.[fmt.id];
-            if (p) next[fmt.id] = { x: p.x * factor, y: p.y * factor };
-          });
-          if (Object.keys(next).length) {
-            setPositions(next);
-            if (data.zIndexMap) setZIndexMap(data.zIndexMap);
-            setDefaultApplied(true);
-            return;
+          const res = await fetch('./interactive_positions.json', { cache: 'no-store' });
+          if (res.ok) {
+            const data = await res.json();
+            const factor = data?.scale ? (scale / data.scale) : 1;
+            const next = {};
+            selected.forEach((fmt) => {
+              const p = data.positions?.[fmt.id];
+              if (p) next[fmt.id] = { x: p.x * factor, y: p.y * factor };
+            });
+            if (Object.keys(next).length) {
+              setPositions(next);
+              if (data.zIndexMap) setZIndexMap(data.zIndexMap);
+              setFileApplied(true);
+              return; // applied from file, skip grid/default
+            }
           }
         } catch {}
+        setFileApplied(true);
       }
-      setDefaultApplied(true);
-    }
-    resetInteractiveLayout();
+
+      // 2) localStorage default (once)
+      if (!defaultApplied) {
+        const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+        if (saved) {
+          try {
+            const data = JSON.parse(saved);
+            const factor = data?.scale ? (scale / data.scale) : 1;
+            const next = {};
+            selected.forEach((fmt) => {
+              const p = data.positions?.[fmt.id];
+              if (p) next[fmt.id] = { x: p.x * factor, y: p.y * factor };
+            });
+            if (Object.keys(next).length) {
+              setPositions(next);
+              if (data.zIndexMap) setZIndexMap(data.zIndexMap);
+              setDefaultApplied(true);
+              return;
+            }
+          } catch {}
+        }
+        setDefaultApplied(true);
+      }
+
+      // 3) fallback to measured grid
+      resetInteractiveLayout();
+    })();
   }, [mode, selected, scale]);
 
   const onDragStart = (id) => (e) => {
