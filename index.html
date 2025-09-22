@@ -85,9 +85,45 @@
         const STEP_X = 260; // card width + gap
         const STEP_Y = 240; // card height + gap
         const [ghostSize, setGhostSize] = useState({ w: 800, h: 500 });
-        const LOCAL_STORAGE_KEY = 'ffv_interactive_positions_default_v1';
         const [defaultApplied, setDefaultApplied] = useState(false);
-        const [fileApplied, setFileApplied] = useState(false);
+        const DEFAULT_LAYOUT = {
+          scale: 3,
+          positions: {
+            super8: { x: 0, y: 0 },
+            reg8: { x: 175.65625, y: 1 },
+            "16mm": { x: 355.328125, y: 0 },
+            super16: { x: 532.984375, y: 0 },
+            "35_academy": { x: 0, y: 96.953125 },
+            "35_full": { x: 190.65625, y: 96.953125 },
+            "35_super35_3perf": { x: 382.328125, y: 98.953125 },
+            "35_techniscope": { x: 575.984375, y: 104.953125 },
+            vistavision: { x: 0, y: 235.296875 },
+            "70mm_5perf": { x: 187.65625, y: 238.296875 },
+            imax_1570: { x: 427.328125, y: 236.296875 },
+            "35_185": { x: 698.984375, y: 237.296875 },
+            "35_166": { x: 0, y: 415.03125 },
+            "35_anamorphic_4perf": { x: 217.65625, y: 414.03125 },
+            s35_239_extract: { x: 240.328125, y: 560.03125 },
+            up70_125x: { x: 0, y: 547.03125 },
+          },
+          zIndexMap: {
+            reg8: 2,
+            "16mm": 3,
+            super16: 4,
+            "35_academy": 7,
+            "35_full": 6,
+            "35_super35_3perf": 8,
+            "35_techniscope": 9,
+            vistavision: 10,
+            "70mm_5perf": 11,
+            imax_1570: 12,
+            "35_185": 13,
+            "35_166": 18,
+            "35_anamorphic_4perf": 19,
+            s35_239_extract: 22,
+            up70_125x: 21,
+          },
+        };
 
         const selected = useMemo(() => formats.filter((f) => activeIds.includes(f.id)), [formats, activeIds]);
 
@@ -146,59 +182,25 @@
           });
         };
 
-        // Interactive grid: initialize by measuring ghost grid or applying saved default/file
+        // Interactive grid: initialize by applying hard-coded default once, else measure ghost grid
         useEffect(() => {
           if (mode !== 'interactive') return;
-          (async () => {
-            // 1) Try external file first (once)
-            if (!fileApplied) {
-              try {
-                const res = await fetch('./interactive_positions.json', { cache: 'no-store' });
-                if (res.ok) {
-                  const data = await res.json();
-                  const factor = data?.scale ? (scale / data.scale) : 1;
-                  const next = {};
-                  selected.forEach((fmt) => {
-                    const p = data.positions?.[fmt.id];
-                    if (p) next[fmt.id] = { x: p.x * factor, y: p.y * factor };
-                  });
-                  if (Object.keys(next).length) {
-                    setPositions(next);
-                    if (data.zIndexMap) setZIndexMap(data.zIndexMap);
-                    setFileApplied(true);
-                    return;
-                  }
-                }
-              } catch {}
-              setFileApplied(true);
-            }
-
-            // 2) localStorage default
-            if (!defaultApplied) {
-              const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-              if (saved) {
-                try {
-                  const data = JSON.parse(saved);
-                  const factor = data?.scale ? (scale / data.scale) : 1;
-                  const next = {};
-                  selected.forEach((fmt) => {
-                    const p = data.positions?.[fmt.id];
-                    if (p) next[fmt.id] = { x: p.x * factor, y: p.y * factor };
-                  });
-                  if (Object.keys(next).length) {
-                    setPositions(next);
-                    if (data.zIndexMap) setZIndexMap(data.zIndexMap);
-                    setDefaultApplied(true);
-                    return;
-                  }
-                } catch {}
-              }
+          if (!defaultApplied) {
+            const factor = DEFAULT_LAYOUT?.scale ? (scale / DEFAULT_LAYOUT.scale) : 1;
+            const next = {};
+            selected.forEach((fmt) => {
+              const p = DEFAULT_LAYOUT.positions?.[fmt.id];
+              if (p) next[fmt.id] = { x: p.x * factor, y: p.y * factor };
+            });
+            if (Object.keys(next).length) {
+              setPositions(next);
+              if (DEFAULT_LAYOUT.zIndexMap) setZIndexMap(DEFAULT_LAYOUT.zIndexMap);
               setDefaultApplied(true);
+              return;
             }
-
-            // 3) fallback to measured grid
-            resetInteractiveLayout();
-          })();
+            setDefaultApplied(true);
+          }
+          resetInteractiveLayout();
         }, [mode, selected, scale]);
 
         const onDragStart = (id) => (e) => {
@@ -413,20 +415,6 @@
                     </div>
                   <div className="mt-2 flex gap-2 flex-wrap">
                     <button className="px-3 py-1 text-sm border rounded-md" onClick={resetInteractiveLayout}>Reset layout</button>
-                    <button className="px-3 py-1 text-sm border rounded-md" onClick={() => {
-                      const payload = { version: 1, scale, positions, zIndexMap };
-                      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
-                      const a = document.createElement('a');
-                      a.href = URL.createObjectURL(blob);
-                      a.download = 'interactive_positions.json';
-                      a.click();
-                      URL.revokeObjectURL(a.href);
-                    }}>Export positions</button>
-                    <button className="px-3 py-1 text-sm border rounded-md" onClick={() => {
-                      const payload = { version: 1, scale, positions, zIndexMap };
-                      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(payload));
-                    }}>Save as default</button>
-                    <button className="px-3 py-1 text-sm border rounded-md" onClick={() => { localStorage.removeItem(LOCAL_STORAGE_KEY); setDefaultApplied(false); }}>Clear default</button>
                   </div>
                   </div>
                 )}
