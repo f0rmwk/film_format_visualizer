@@ -70,6 +70,7 @@ function FilmFormatVisualizer() {
   const [zIndexMap, setZIndexMap] = useState({}); // id -> zIndex
   const [interactiveCols, setInteractiveCols] = useState(3);
   const [isMobile, setIsMobile] = useState(false);
+  const [fitScale, setFitScale] = useState(null); // auto scale for mobile/interactive
   const STEP_X = 260; // approx card width + gap
   const STEP_Y = 240; // approx card height + gap
   const [ghostSize, setGhostSize] = useState({ w: 800, h: 500 });
@@ -186,6 +187,29 @@ function FilmFormatVisualizer() {
     window.addEventListener('resize', updateMobile);
     return () => window.removeEventListener('resize', updateMobile);
   }, []);
+
+  // Compute an auto-fit scale on mobile so frames don’t overflow width
+  useEffect(() => {
+    if (!isMobile || mode !== 'interactive') {
+      setFitScale(null);
+      return;
+    }
+    const container = interactiveRef.current;
+    const cw = container ? container.clientWidth : window.innerWidth;
+    if (!cw) return;
+    const getFilmWidthMm = (fmt) => {
+      const { imageMm, gaugeMm, orientation, perfsPerFrame, perfDirection } = fmt;
+      const sideMargin = Math.max((gaugeMm - imageMm.w) / 2, gaugeMm * 0.08);
+      // width in mm for the film stock area
+      return orientation === 'vertical' ? gaugeMm : imageMm.w + sideMargin * 2;
+    };
+    let maxMm = 0;
+    for (const fmt of selected) maxMm = Math.max(maxMm, getFilmWidthMm(fmt));
+    if (maxMm <= 0) return;
+    const paddingPx = 24 + 16; // container padding + card padding approx
+    const s = Math.min(scale, Math.max(1, (cw - paddingPx) / maxMm));
+    setFitScale(s);
+  }, [isMobile, mode, selected, scale]);
 
   const onDragStart = (id) => (e) => {
     if (mode !== "interactive") return;
@@ -511,7 +535,7 @@ function FilmFormatVisualizer() {
               <div className="flex flex-col gap-3">
                 {selected.map((fmt) => (
                   <div key={fmt.id} className="w-full flex flex-col items-center p-2 bg-white/80 rounded-lg border shadow-sm" style={{ opacity: interactiveOpacity }}>
-                    <FilmFrame fmt={fmt} scale={scale} showFilmStock={showFilmStock} showPerfs={showPerfs} fillOverride={interactiveOpacity} />
+                    <FilmFrame fmt={fmt} scale={fitScale || scale} showFilmStock={showFilmStock} showPerfs={showPerfs} fillOverride={interactiveOpacity} />
                     <div className="text-center text-xs text-stone-600 max-w-full">
                       <div className="font-medium text-stone-800">{fmt.label}</div>
                       <div>{fmt.imageMm.w.toFixed(2)} × {fmt.imageMm.h.toFixed(2)} mm (<Aspect w={fmt.imageMm.w} h={fmt.imageMm.h} />)</div>
