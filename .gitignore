@@ -25,3 +25,5 @@ coverage/
 .vscode/
 .idea/
 
+# Local interactive layout (do not commit)
+interactive_positions.json

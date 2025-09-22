@@ -61,6 +61,58 @@ function FilmFormatVisualizer() {
   const [sortOverlay, setSortOverlay] = useState("large-top"); // none | small-top | large-top (default large-top)
   const [detailsCollapsed, setDetailsCollapsed] = useState(true); // collapse Format Details by default
   const overlayScrollRef = useRef(null);
+  const interactiveRef = useRef(null);
+  const ghostGridRef = useRef(null);
+  const dragStateRef = useRef(null);
+  const [positions, setPositions] = useState({}); // id -> {x, y}
+  const [interactiveOpacity, setInteractiveOpacity] = useState(0.7);
+  const zCounterRef = useRef(1);
+  const [zIndexMap, setZIndexMap] = useState({}); // id -> zIndex
+  const [interactiveCols, setInteractiveCols] = useState(3);
+  const STEP_X = 260; // approx card width + gap
+  const STEP_Y = 240; // approx card height + gap
+  const [ghostSize, setGhostSize] = useState({ w: 800, h: 500 });
+  const [defaultApplied, setDefaultApplied] = useState(false);
+
+  // Hard-coded default positions (exported from previous arrangement)
+  const DEFAULT_LAYOUT = {
+    scale: 3,
+    positions: {
+      super8: { x: 0, y: 0 },
+      reg8: { x: 175.65625, y: 1 },
+      "16mm": { x: 355.328125, y: 0 },
+      super16: { x: 532.984375, y: 0 },
+      "35_academy": { x: 0, y: 96.953125 },
+      "35_full": { x: 190.65625, y: 96.953125 },
+      "35_super35_3perf": { x: 382.328125, y: 98.953125 },
+      "35_techniscope": { x: 575.984375, y: 104.953125 },
+      vistavision: { x: 0, y: 235.296875 },
+      "70mm_5perf": { x: 187.65625, y: 238.296875 },
+      imax_1570: { x: 427.328125, y: 236.296875 },
+      "35_185": { x: 698.984375, y: 237.296875 },
+      "35_166": { x: 0, y: 415.03125 },
+      "35_anamorphic_4perf": { x: 217.65625, y: 414.03125 },
+      s35_239_extract: { x: 240.328125, y: 560.03125 },
+      up70_125x: { x: 0, y: 547.03125 },
+    },
+    zIndexMap: {
+      reg8: 2,
+      "16mm": 3,
+      super16: 4,
+      "35_academy": 7,
+      "35_full": 6,
+      "35_super35_3perf": 8,
+      "35_techniscope": 9,
+      vistavision: 10,
+      "70mm_5perf": 11,
+      imax_1570: 12,
+      "35_185": 13,
+      "35_166": 18,
+      "35_anamorphic_4perf": 19,
+      s35_239_extract: 22,
+      up70_125x: 21,
+    },
+  };
 
   const selected = useMemo(() => formats.filter((f) => activeIds.includes(f.id)), [formats, activeIds]);
 
@@ -93,6 +145,83 @@ function FilmFormatVisualizer() {
     });
   }, [mode, scale, maxGate.w, maxGate.h, controlsCollapsed, selectedSorted.length]);
 
+  const resetInteractiveLayout = () => {
+    const factor = DEFAULT_LAYOUT?.scale ? (scale / DEFAULT_LAYOUT.scale) : 1;
+    const next = {};
+    selected.forEach((fmt) => {
+      const p = DEFAULT_LAYOUT.positions?.[fmt.id];
+      if (p) next[fmt.id] = { x: p.x * factor, y: p.y * factor };
+    });
+    setPositions(next);
+    if (DEFAULT_LAYOUT.zIndexMap) setZIndexMap(DEFAULT_LAYOUT.zIndexMap);
+  };
+
+  // Initialize layout by applying hard-coded default; maintain positions when selection changes
+  useEffect(() => {
+    if (mode !== "interactive") return;
+    if (!defaultApplied) {
+      // First entry: set all selected to defaults
+      resetInteractiveLayout();
+      setDefaultApplied(true);
+    } else {
+      // Later: add defaults for any new selections, keep existing positions for others
+      const factor = DEFAULT_LAYOUT?.scale ? (scale / DEFAULT_LAYOUT.scale) : 1;
+      setPositions((prev) => {
+        const next = { ...prev };
+        for (const fmt of selected) {
+          if (!(fmt.id in next)) {
+            const p = DEFAULT_LAYOUT.positions?.[fmt.id];
+            if (p) next[fmt.id] = { x: p.x * factor, y: p.y * factor };
+          }
+        }
+        return next;
+      });
+    }
+  }, [mode, selected, scale]);
+
+  const onDragStart = (id) => (e) => {
+    if (mode !== "interactive") return;
+    const container = interactiveRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const clientX = e.clientX ?? (e.touches && e.touches[0]?.clientX);
+    const clientY = e.clientY ?? (e.touches && e.touches[0]?.clientY);
+    if (clientX == null || clientY == null) return;
+    const pos = positions[id] || { x: 0, y: 0 };
+    dragStateRef.current = {
+      id,
+      offsetX: clientX - (rect.left + pos.x),
+      offsetY: clientY - (rect.top + pos.y),
+    };
+    // Bring to front
+    const nextZ = (zCounterRef.current || 1) + 1;
+    zCounterRef.current = nextZ;
+    setZIndexMap((prev) => ({ ...prev, [id]: nextZ }));
+    window.addEventListener("pointermove", onDragMove);
+    window.addEventListener("pointerup", onDragEnd, { once: true });
+  };
+
+  const onDragMove = (e) => {
+    const s = dragStateRef.current;
+    if (!s) return;
+    const container = interactiveRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const clientX = e.clientX;
+    const clientY = e.clientY;
+    if (clientX == null || clientY == null) return;
+    let x = clientX - rect.left - s.offsetX;
+    let y = clientY - rect.top - s.offsetY;
+    x = Math.max(0, x);
+    y = Math.max(0, y);
+    setPositions((prev) => ({ ...prev, [s.id]: { x, y } }));
+  };
+
+  const onDragEnd = () => {
+    window.removeEventListener("pointermove", onDragMove);
+    dragStateRef.current = null;
+  };
+
   const handleToggle = (id) => {
     setActiveIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
@@ -114,7 +243,7 @@ function FilmFormatVisualizer() {
   };
 
   // Inner component: separate fill/stroke opacity; larger IMAX/VV perf height for visibility
-  function FilmFrame({ fmt, scale, showFilmStock, showPerfs }) {
+  function FilmFrame({ fmt, scale, showFilmStock, showPerfs, fillOverride }) {
     const { imageMm, gaugeMm, orientation, perfsPerFrame, perfDirection } = fmt;
 
     const sideMargin = Math.max((gaugeMm - imageMm.w) / 2, gaugeMm * 0.08);
@@ -187,7 +316,7 @@ function FilmFormatVisualizer() {
           height={imageMm.h}
           style={{
             fill: color,
-            fillOpacity: fillOpacity,
+            fillOpacity: fillOverride ?? fillOpacity,
             stroke: color,
             strokeOpacity: 1,
             strokeWidth: strokeWidth,
@@ -197,6 +326,20 @@ function FilmFormatVisualizer() {
       </svg>
     );
   }
+
+  // Derive canvas size for Interactive mode
+  const colsForCanvas = interactiveCols || 3;
+  const rowsForCanvas = Math.max(1, Math.ceil(selected.length / colsForCanvas));
+  const posBounds = useMemo(() => {
+    let maxX = 0, maxY = 0;
+    for (const fmt of selected) {
+      const p = positions[fmt.id];
+      if (!p) continue;
+      maxX = Math.max(maxX, p.x);
+      maxY = Math.max(maxY, p.y);
+    }
+    return { w: maxX + STEP_X, h: maxY + STEP_Y };
+  }, [positions]);
 
   return (
     <div className="p-6 grid gap-6 md:grid-cols-12">
@@ -258,7 +401,21 @@ function FilmFormatVisualizer() {
           <div className="mb-4 flex gap-2">
             <button onClick={() => setMode("overlay")} className={`px-3 py-1 rounded-md border ${mode === "overlay" ? "bg-black text-white" : "bg-white"}`}>Overlay</button>
             <button onClick={() => setMode("grid")} className={`px-3 py-1 rounded-md border ${mode === "grid" ? "bg-black text-white" : "bg-white"}`}>Grid</button>
+            <button onClick={() => setMode("interactive")} className={`px-3 py-1 rounded-md border ${mode === "interactive" ? "bg-black text-white" : "bg-white"}`}>Interactive</button>
           </div>
+
+          {mode === "interactive" && (
+            <div className="mb-4">
+              <label className="block text-sm mb-1" htmlFor="interactiveFill">Interactive opacity</label>
+              <div className="flex items-center gap-3">
+                <input id="interactiveFill" type="range" min={0} max={0.9} step={0.01} value={interactiveOpacity} onChange={(e) => setInteractiveOpacity(parseFloat(e.target.value))} className="w-full" />
+                <span className="w-14 text-right tabular-nums">{interactiveOpacity.toFixed(2)}</span>
+              </div>
+              <div className="mt-2 flex gap-2 flex-wrap">
+                <button className="px-3 py-1 text-sm border rounded-md" onClick={resetInteractiveLayout}>Reset layout</button>
+              </div>
+            </div>
+          )}
 
           {/* Formats list */}
           <div className="space-y-2 max-h-72 overflow-auto pr-1">
@@ -299,7 +456,7 @@ function FilmFormatVisualizer() {
 
       {/* Visualizer */}
       <div className={`col-span-12 ${controlsCollapsed ? "md:col-span-12" : "md:col-span-7 lg:col-span-8"} min-w-0 border rounded-2xl p-4 bg-white shadow-sm`}>
-        <h2 className="text-lg font-semibold mb-4">Visualizer</h2>
+        <h2 className="text-lg font-semibold mb-4">{mode === 'interactive' ? 'Interactive Grid' : 'Visualizer'}</h2>
         {mode === "overlay" ? (
           <div ref={overlayScrollRef} className="relative w-full overflow-auto border rounded-xl p-4 bg-white min-h-[320px]">
             <div className="relative" style={{ width: Math.max(320, maxGate.w * scale + 48), height: Math.max(240, maxGate.h * scale + 48) }}>
@@ -312,7 +469,7 @@ function FilmFormatVisualizer() {
               </div>
             </div>
           </div>
-        ) : (
+        ) : (mode === "grid" ? (
           <div className="w-full overflow-auto" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem' }}>
             {selected.map((fmt) => (
               <div key={fmt.id} className="flex flex-col items-center gap-2">
@@ -325,7 +482,31 @@ function FilmFormatVisualizer() {
               </div>
             ))}
           </div>
-        )}
+        ) : (
+          <div className="relative w-full overflow-auto border rounded-xl p-4 bg-white" ref={interactiveRef}>
+            <div className="relative" style={{ width: Math.max(320, posBounds.w + 24), height: Math.max(240, posBounds.h + 24) }}>
+              {selected.map((fmt) => {
+                const pos = positions[fmt.id] || { x: 0, y: 0 };
+                return (
+                  <div
+                    key={fmt.id}
+                    className="absolute select-none"
+                    style={{ left: pos.x, top: pos.y, cursor: 'grab', zIndex: zIndexMap[fmt.id] || 1 }}
+                    onPointerDown={onDragStart(fmt.id)}
+                  >
+                    <div className="flex flex-col items-center gap-2 p-2 bg-white/80 rounded-lg border shadow-sm" style={{ opacity: interactiveOpacity }}>
+                      <FilmFrame fmt={fmt} scale={scale} showFilmStock={showFilmStock} showPerfs={showPerfs} fillOverride={interactiveOpacity} />
+                      <div className="text-center text-xs text-stone-600 max-w-[220px]">
+                        <div className="font-medium text-stone-800">{fmt.label}</div>
+                        <div>{fmt.imageMm.w.toFixed(2)} × {fmt.imageMm.h.toFixed(2)} mm (<Aspect w={fmt.imageMm.w} h={fmt.imageMm.h} />)</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Notes (moved out of details so always visible) */}
