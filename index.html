@@ -315,6 +315,16 @@
               )}
             </div>
 
+            {/* Notes (always visible) */}
+            <div className="col-span-12 border rounded-2xl p-4 bg-white shadow-sm">
+              <h2 className="text-lg font-semibold mb-2">Notes</h2>
+              <div className="text-xs text-stone-500 leading-relaxed">
+                <p><strong>Legend & caveats:</strong> Gate sizes are typical camera/negative image areas. Projection and blow‑up apertures differ. Perforations shown are schematic (count & orientation) rather than exact pitch or profile (BH, KS, IMAX). Perfs indicate count/orientation and may not align exactly with gates or film edges.</p>
+                <p className="mt-2"><strong>Tip:</strong> Use <em>Overlay</em> + "Small → Top" or "Large → Top" to control which outlines stay most visible. Reduce Fill opacity to make overlays translucent.</p>
+                <p className="mt-2"><strong>IMAX note:</strong> 15/70 values treat the longer dimension as along-transport; physical film width is ~70 mm.</p>
+              </div>
+            </div>
+
             {detailsCollapsed ? (
               <div className="col-span-12">
                 <button onClick={() => setDetailsCollapsed(false)} className="px-3 py-1 border rounded-md">Show format details</button>
@@ -364,11 +374,7 @@
                   </table>
                 </div>
 
-                <div className="mt-4 text-xs text-stone-500 leading-relaxed">
-                  <p><strong>Legend & caveats:</strong> Gate sizes are typical camera/negative image areas. Projection and blow‑up apertures differ. Perforations shown are schematic (count & orientation) rather than exact pitch or profile (BH, KS, IMAX).</p>
-                  <p className="mt-2"><strong>Tip:</strong> Use <em>Overlay</em> + "Small → Top" or "Large → Top" to control which outlines stay most visible. Reduce Fill opacity to make overlays translucent.</p>
-                  <p className="mt-2"><strong>IMAX note:</strong> 15/70 values treat the longer dimension as along-transport; physical film width is ~70 mm.</p>
-                </div>
+                
               </div>
             )}
           </div>
