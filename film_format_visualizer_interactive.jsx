@@ -69,6 +69,7 @@ function FilmFormatVisualizer() {
   const zCounterRef = useRef(1);
   const [zIndexMap, setZIndexMap] = useState({}); // id -> zIndex
   const [interactiveCols, setInteractiveCols] = useState(3);
+  const [isMobile, setIsMobile] = useState(false);
   const STEP_X = 260; // approx card width + gap
   const STEP_Y = 240; // approx card height + gap
   const [ghostSize, setGhostSize] = useState({ w: 800, h: 500 });
@@ -178,6 +179,13 @@ function FilmFormatVisualizer() {
       });
     }
   }, [mode, selected, scale]);
+
+  useEffect(() => {
+    const updateMobile = () => setIsMobile(window.innerWidth < 768);
+    updateMobile();
+    window.addEventListener('resize', updateMobile);
+    return () => window.removeEventListener('resize', updateMobile);
+  }, []);
 
   const onDragStart = (id) => (e) => {
     if (mode !== "interactive") return;
@@ -498,30 +506,46 @@ function FilmFormatVisualizer() {
             ))}
           </div>
         ) : (
-          <div className="relative w-full overflow-auto border rounded-xl p-4 bg-white" ref={interactiveRef} style={{ touchAction: 'none' }}>
-            <div className="relative" style={{ width: Math.max(320, posBounds.w + 24), height: Math.max(240, posBounds.h + 24) }}>
-              {selected.map((fmt) => {
-                const pos = positions[fmt.id] || { x: 0, y: 0 };
-                return (
-                  <div
-                    key={fmt.id}
-                    className="absolute select-none"
-                    style={{ left: pos.x, top: pos.y, cursor: 'grab', zIndex: zIndexMap[fmt.id] || 1, touchAction: 'none' }}
-                    onPointerDown={onDragStart(fmt.id)}
-                    onTouchStart={onDragStart(fmt.id)}
-                  >
-                    <div className="flex flex-col items-center gap-2 p-2 bg-white/80 rounded-lg border shadow-sm" style={{ opacity: interactiveOpacity }}>
-                      <FilmFrame fmt={fmt} scale={scale} showFilmStock={showFilmStock} showPerfs={showPerfs} fillOverride={interactiveOpacity} />
-                      <div className="text-center text-xs text-stone-600 max-w-[220px]">
-                        <div className="font-medium text-stone-800">{fmt.label}</div>
-                        <div>{fmt.imageMm.w.toFixed(2)} × {fmt.imageMm.h.toFixed(2)} mm (<Aspect w={fmt.imageMm.w} h={fmt.imageMm.h} />)</div>
-                      </div>
+          isMobile ? (
+            <div className="w-full border rounded-xl p-3 bg-white" ref={interactiveRef}>
+              <div className="flex flex-col gap-3">
+                {selected.map((fmt) => (
+                  <div key={fmt.id} className="w-full flex flex-col items-center p-2 bg-white/80 rounded-lg border shadow-sm" style={{ opacity: interactiveOpacity }}>
+                    <FilmFrame fmt={fmt} scale={scale} showFilmStock={showFilmStock} showPerfs={showPerfs} fillOverride={interactiveOpacity} />
+                    <div className="text-center text-xs text-stone-600 max-w-full">
+                      <div className="font-medium text-stone-800">{fmt.label}</div>
+                      <div>{fmt.imageMm.w.toFixed(2)} × {fmt.imageMm.h.toFixed(2)} mm (<Aspect w={fmt.imageMm.w} h={fmt.imageMm.h} />)</div>
                     </div>
                   </div>
-                );
-              })}
+                ))}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="relative w-full overflow-auto border rounded-xl p-4 bg-white" ref={interactiveRef} style={{ touchAction: 'none' }}>
+              <div className="relative" style={{ width: Math.max(320, posBounds.w + 24), height: Math.max(240, posBounds.h + 24) }}>
+                {selected.map((fmt) => {
+                  const pos = positions[fmt.id] || { x: 0, y: 0 };
+                  return (
+                    <div
+                      key={fmt.id}
+                      className="absolute select-none"
+                      style={{ left: pos.x, top: pos.y, cursor: 'grab', zIndex: zIndexMap[fmt.id] || 1, touchAction: 'none' }}
+                      onPointerDown={onDragStart(fmt.id)}
+                      onTouchStart={onDragStart(fmt.id)}
+                    >
+                      <div className="flex flex-col items-center gap-2 p-2 bg-white/80 rounded-lg border shadow-sm" style={{ opacity: interactiveOpacity }}>
+                        <FilmFrame fmt={fmt} scale={scale} showFilmStock={showFilmStock} showPerfs={showPerfs} fillOverride={interactiveOpacity} />
+                        <div className="text-center text-xs text-stone-600 max-w-[220px]">
+                          <div className="font-medium text-stone-800">{fmt.label}</div>
+                          <div>{fmt.imageMm.w.toFixed(2)} × {fmt.imageMm.h.toFixed(2)} mm (<Aspect w={fmt.imageMm.w} h={fmt.imageMm.h} />)</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )
         ))}
       </div>
 
