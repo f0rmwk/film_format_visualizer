@@ -418,7 +418,7 @@ function FilmFormatVisualizer() {
     <div className="p-6 grid gap-6 md:grid-cols-12">
       {/* Controls (collapsible) */}
       {!controlsCollapsed ? (
-        <div className="col-span-12 md:col-span-5 lg:col-span-4 min-w-0 border rounded-2xl p-4 bg-white shadow-sm relative">
+        <div className="col-span-12 md:col-span-5 lg:col-span-4 min-w-0 border rounded-2xl p-4 bg-white shadow-sm relative order-2">
           <button
             onClick={() => setControlsCollapsed(true)}
             className="absolute right-3 top-3 px-2 py-1 text-xs border rounded-md"
@@ -528,7 +528,7 @@ function FilmFormatVisualizer() {
       )}
 
       {/* Visualizer */}
-      <div className={`col-span-12 ${controlsCollapsed ? "md:col-span-12" : "md:col-span-7 lg:col-span-8"} min-w-0 border rounded-2xl p-4 bg-white shadow-sm`}>
+      <div className={`col-span-12 ${controlsCollapsed ? "md:col-span-12" : "md:col-span-7 lg:col-span-8"} min-w-0 border rounded-2xl p-4 bg-white shadow-sm order-1`}>
         <h2 className="text-lg font-semibold mb-4">{mode === 'interactive' ? 'Interactive Grid' : 'Visualizer'}</h2>
         {mode === "overlay" ? (
           <div ref={overlayScrollRef} className="relative w-full overflow-auto border rounded-xl p-4 bg-white min-h-[320px]">
