@@ -14,7 +14,10 @@
   </head>
   <body class="bg-stone-100">
     <div class="w-full px-4 md:px-6 lg:px-8">
-      <h1 class="text-2xl font-semibold mb-4">Film Format Visualizer</h1>
+      <h1 class="text-2xl font-semibold mb-2">Film Format Visualizer</h1>
+      <div class="mb-4 md:hidden">
+        <a href="#controls" class="inline-block px-3 py-1 border rounded-md">Controls</a>
+      </div>
       <div id="root"></div>
     </div>
 
@@ -82,6 +85,8 @@
         const zCounterRef = useRef(1);
         const [zIndexMap, setZIndexMap] = useState({});
         const [interactiveCols, setInteractiveCols] = useState(3);
+        const [isMobile, setIsMobile] = useState(false);
+        const [fitScale, setFitScale] = useState(null);
         const STEP_X = 260; // card width + gap
         const STEP_Y = 240; // card height + gap
         const [ghostSize, setGhostSize] = useState({ w: 800, h: 500 });
@@ -337,7 +342,7 @@
         return (
           <div className="p-6 grid gap-6 md:grid-cols-12">
             {!controlsCollapsed ? (
-              <div className="col-span-12 md:col-span-5 lg:col-span-4 min-w-0 border rounded-2xl p-4 bg-white shadow-sm relative">
+              <div id="controls" className="col-span-12 md:col-span-5 lg:col-span-4 min-w-0 border rounded-2xl p-4 bg-white shadow-sm relative order-2">
                 <button
                   onClick={() => setControlsCollapsed(true)}
                   className="absolute right-3 top-3 px-2 py-1 text-xs border rounded-md"
@@ -404,7 +409,7 @@
                   </div>
                 )}
 
-                <div className="space-y-2 max-h-72 overflow-auto pr-1">
+                <div className="space-y-2 pr-1">
                   <div className="flex items-center justify-between">
                     <div className="text-sm font-medium">Formats</div>
                     <div className="flex gap-2">
@@ -437,7 +442,7 @@
               </div>
             )}
 
-            <div className={`col-span-12 ${controlsCollapsed ? "md:col-span-12" : "md:col-span-7 lg:col-span-8"} min-w-0 border rounded-2xl p-4 bg-white shadow-sm`}>
+            <div className={`col-span-12 ${controlsCollapsed ? "md:col-span-12" : "md:col-span-7 lg:col-span-8"} min-w-0 border rounded-2xl p-4 bg-white shadow-sm order-1`}>
               <h2 className="text-lg font-semibold mb-4">{mode === 'interactive' ? 'Interactive Grid' : 'Visualizer'}</h2>
               {mode === "overlay" ? (
                 <div ref={overlayScrollRef} className="relative w-full overflow-auto border rounded-xl p-4 bg-white min-h-[320px]">
@@ -465,34 +470,51 @@
                   ))}
                 </div>
               ) : (
-                <div className="relative w-full overflow-auto border rounded-xl p-4 bg-white" ref={interactiveRef}>
-                  <div className="relative" style={{ width: (() => { let maxX=0; selected.forEach(fmt => { const p=positions[fmt.id]; if (p) maxX=Math.max(maxX,p.x);}); return Math.max(320, maxX + STEP_X + 24); })(), height: (() => { let maxY=0; selected.forEach(fmt => { const p=positions[fmt.id]; if (p) maxY=Math.max(maxY,p.y);}); return Math.max(240, maxY + STEP_Y + 24); })() }}>
-                    {selected.map((fmt) => {
-                      const pos = positions[fmt.id] || { x: 0, y: 0 };
-                      return (
-                        <div
-                          key={fmt.id}
-                          className="absolute select-none"
-                          style={{ left: pos.x, top: pos.y, cursor: 'grab', zIndex: (zIndexMap[fmt.id] || 1) }}
-                          onPointerDown={onDragStart(fmt.id)}
-                        >
-                          <div className="flex flex-col items-center gap-2 p-2 bg-white/80 rounded-lg border shadow-sm" style={{ opacity: interactiveOpacity }}>
-                            <FilmFrame fmt={fmt} scale={scale} showFilmStock={showFilmStock} showPerfs={showPerfs} fillOverride={interactiveOpacity} />
-                            <div className="text-center text-xs text-stone-600 max-w-[220px]">
-                              <div className="font-medium text-stone-800">{fmt.label}</div>
-                              <div>{fmt.imageMm.w.toFixed(2)} × {fmt.imageMm.h.toFixed(2)} mm (<Aspect w={fmt.imageMm.w} h={fmt.imageMm.h} />)</div>
-                            </div>
+                isMobile ? (
+                  <div className="w-full border rounded-xl p-3 bg-white" ref={interactiveRef}>
+                    <div className="flex flex-col gap-3">
+                      {selected.map((fmt) => (
+                        <div key={fmt.id} className="w-full flex flex-col items-center p-2 bg-white/80 rounded-lg border shadow-sm" style={{ opacity: interactiveOpacity }}>
+                          <FilmFrame fmt={fmt} scale={fitScale || scale} showFilmStock={showFilmStock} showPerfs={showPerfs} fillOverride={interactiveOpacity} />
+                          <div className="text-center text-xs text-stone-600 max-w-full">
+                            <div className="font-medium text-stone-800">{fmt.label}</div>
+                            <div>{fmt.imageMm.w.toFixed(2)} × {fmt.imageMm.h.toFixed(2)} mm (<Aspect w={fmt.imageMm.w} h={fmt.imageMm.h} />)</div>
                           </div>
                         </div>
-                      );
-                    })}
+                      ))}
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="relative w-full overflow-auto border rounded-xl p-4 bg-white" ref={interactiveRef} style={{ touchAction: 'none' }}>
+                    <div className="relative" style={{ width: (() => { let maxX=0; selected.forEach(fmt => { const p=positions[fmt.id]; if (p) maxX=Math.max(maxX,p.x);}); return Math.max(320, maxX + STEP_X + 24); })(), height: (() => { let maxY=0; selected.forEach(fmt => { const p=positions[fmt.id]; if (p) maxY=Math.max(maxY,p.y);}); return Math.max(240, maxY + STEP_Y + 24); })() }}>
+                      {selected.map((fmt) => {
+                        const pos = positions[fmt.id] || { x: 0, y: 0 };
+                        return (
+                          <div
+                            key={fmt.id}
+                            className="absolute select-none"
+                            style={{ left: pos.x, top: pos.y, cursor: 'grab', zIndex: (zIndexMap[fmt.id] || 1), touchAction: 'none' }}
+                            onPointerDown={onDragStart(fmt.id)}
+                            onTouchStart={onDragStart(fmt.id)}
+                          >
+                            <div className="flex flex-col items-center gap-2 p-2 bg-white/80 rounded-lg border shadow-sm" style={{ opacity: interactiveOpacity }}>
+                              <FilmFrame fmt={fmt} scale={scale} showFilmStock={showFilmStock} showPerfs={showPerfs} fillOverride={interactiveOpacity} />
+                              <div className="text-center text-xs text-stone-600 max-w-[220px]">
+                                <div className="font-medium text-stone-800">{fmt.label}</div>
+                                <div>{fmt.imageMm.w.toFixed(2)} × {fmt.imageMm.h.toFixed(2)} mm (<Aspect w={fmt.imageMm.w} h={fmt.imageMm.h} />)</div>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )
               ))}
             </div>
 
             {/* Notes (always visible) */}
-            <div className="col-span-12 border rounded-2xl p-4 bg-white shadow-sm">
+            <div className="col-span-12 border rounded-2xl p-4 bg-white shadow-sm order-last">
               <h2 className="text-lg font-semibold mb-2">Notes</h2>
               <div className="text-xs text-stone-500 leading-relaxed">
                 <p><strong>Legend & caveats:</strong> Gate sizes are typical camera/negative image areas. Projection and blow‑up apertures differ. Perforations shown are schematic (count & orientation) rather than exact pitch or profile (BH, KS, IMAX). Perfs indicate count/orientation and may not align exactly with gates or film edges.</p>
@@ -502,11 +524,11 @@
             </div>
 
             {detailsCollapsed ? (
-              <div className="col-span-12">
+              <div className="col-span-12 order-last">
                 <button onClick={() => setDetailsCollapsed(false)} className="px-3 py-1 border rounded-md">Show format details</button>
               </div>
             ) : (
-              <div className="col-span-12 border rounded-2xl p-4 bg-white shadow-sm">
+              <div className="col-span-12 border rounded-2xl p-4 bg-white shadow-sm order-last">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold">Format Details & Edits</h2>
                   <div className="flex gap-2">

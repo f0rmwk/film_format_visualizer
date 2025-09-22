@@ -69,6 +69,10 @@ function FilmFormatVisualizer() {
   const zCounterRef = useRef(1);
   const [zIndexMap, setZIndexMap] = useState({}); // id -> zIndex
   const [interactiveCols, setInteractiveCols] = useState(3);
+  const [isMobile, setIsMobile] = useState(false);
+  const [fitScale, setFitScale] = useState(null); // auto scale for mobile/interactive
+  const [canvasScale, setCanvasScale] = useState(1);
+  const [viewportW, setViewportW] = useState(typeof window !== 'undefined' ? window.innerWidth : 1024);
   const STEP_X = 260; // approx card width + gap
   const STEP_Y = 240; // approx card height + gap
   const [ghostSize, setGhostSize] = useState({ w: 800, h: 500 });
@@ -179,26 +183,85 @@ function FilmFormatVisualizer() {
     }
   }, [mode, selected, scale]);
 
+  useEffect(() => {
+    const updateMobile = () => setIsMobile(window.innerWidth < 768);
+    updateMobile();
+    window.addEventListener('resize', updateMobile);
+    return () => window.removeEventListener('resize', updateMobile);
+  }, []);
+
+  useEffect(() => {
+    const onResize = () => setViewportW(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+
+  // Compute an auto-fit scale on mobile so frames don’t overflow width
+  useEffect(() => {
+    if (!isMobile || mode !== 'interactive') {
+      setFitScale(null);
+      return;
+    }
+    const container = interactiveRef.current;
+    const cw = container ? container.clientWidth : window.innerWidth;
+    if (!cw) return;
+    const getFilmWidthMm = (fmt) => {
+      const { imageMm, gaugeMm, orientation, perfsPerFrame, perfDirection } = fmt;
+      const sideMargin = Math.max((gaugeMm - imageMm.w) / 2, gaugeMm * 0.08);
+      // width in mm for the film stock area
+      return orientation === 'vertical' ? gaugeMm : imageMm.w + sideMargin * 2;
+    };
+    let maxMm = 0;
+    for (const fmt of selected) maxMm = Math.max(maxMm, getFilmWidthMm(fmt));
+    if (maxMm <= 0) return;
+    const paddingPx = 24 + 16; // container padding + card padding approx
+    const s = Math.min(scale, Math.max(1, (cw - paddingPx) / maxMm));
+    setFitScale(s);
+  }, [isMobile, mode, selected, scale]);
+
+  // Compute desktop canvas scale to keep cards inside visible area (fit width)
+  useEffect(() => {
+    if (isMobile || mode !== 'interactive') { setCanvasScale(1); return; }
+    const container = interactiveRef.current;
+    const cw = container ? container.clientWidth : viewportW;
+    const baseW = Math.max(320, posBounds.w + 24);
+    if (!cw || baseW <= 0) { setCanvasScale(1); return; }
+    const s = Math.min(1, (cw - 16) / baseW);
+    setCanvasScale(s);
+  }, [isMobile, mode, posBounds.w, viewportW]);
+
   const onDragStart = (id) => (e) => {
     if (mode !== "interactive") return;
     const container = interactiveRef.current;
     if (!container) return;
     const rect = container.getBoundingClientRect();
-    const clientX = e.clientX ?? (e.touches && e.touches[0]?.clientX);
-    const clientY = e.clientY ?? (e.touches && e.touches[0]?.clientY);
+    const isTouch = e.type === 'touchstart' || (typeof TouchEvent !== 'undefined' && e instanceof TouchEvent);
+    const clientX = isTouch ? (e.touches && e.touches[0]?.clientX) : e.clientX;
+    const clientY = isTouch ? (e.touches && e.touches[0]?.clientY) : e.clientY;
     if (clientX == null || clientY == null) return;
     const pos = positions[id] || { x: 0, y: 0 };
+    const scaleF = isMobile ? 1 : (canvasScale || 1);
+    const localX = (clientX - rect.left) / scaleF;
+    const localY = (clientY - rect.top) / scaleF;
     dragStateRef.current = {
       id,
-      offsetX: clientX - (rect.left + pos.x),
-      offsetY: clientY - (rect.top + pos.y),
+      offsetX: localX - pos.x,
+      offsetY: localY - pos.y,
+      isTouch,
+      scaleAtStart: scaleF,
     };
     // Bring to front
     const nextZ = (zCounterRef.current || 1) + 1;
     zCounterRef.current = nextZ;
     setZIndexMap((prev) => ({ ...prev, [id]: nextZ }));
-    window.addEventListener("pointermove", onDragMove);
-    window.addEventListener("pointerup", onDragEnd, { once: true });
+    if (isTouch) {
+      window.addEventListener('touchmove', onDragMove, { passive: false });
+      window.addEventListener('touchend', onDragEnd, { once: true });
+      window.addEventListener('touchcancel', onDragEnd, { once: true });
+    } else {
+      window.addEventListener("pointermove", onDragMove);
+      window.addEventListener("pointerup", onDragEnd, { once: true });
+    }
   };
 
   const onDragMove = (e) => {
@@ -207,18 +270,28 @@ function FilmFormatVisualizer() {
     const container = interactiveRef.current;
     if (!container) return;
     const rect = container.getBoundingClientRect();
-    const clientX = e.clientX;
-    const clientY = e.clientY;
+    const isTouch = s.isTouch || e.type === 'touchmove';
+    const clientX = isTouch ? (e.touches && e.touches[0]?.clientX) : e.clientX;
+    const clientY = isTouch ? (e.touches && e.touches[0]?.clientY) : e.clientY;
     if (clientX == null || clientY == null) return;
-    let x = clientX - rect.left - s.offsetX;
-    let y = clientY - rect.top - s.offsetY;
+    const scaleF = isMobile ? 1 : (s.scaleAtStart || canvasScale || 1);
+    const localX = (clientX - rect.left) / scaleF;
+    const localY = (clientY - rect.top) / scaleF;
+    let x = localX - s.offsetX;
+    let y = localY - s.offsetY;
     x = Math.max(0, x);
     y = Math.max(0, y);
     setPositions((prev) => ({ ...prev, [s.id]: { x, y } }));
+    if (e.cancelable) e.preventDefault();
   };
 
   const onDragEnd = () => {
-    window.removeEventListener("pointermove", onDragMove);
+    const s = dragStateRef.current;
+    if (s?.isTouch) {
+      window.removeEventListener('touchmove', onDragMove);
+    } else {
+      window.removeEventListener("pointermove", onDragMove);
+    }
     dragStateRef.current = null;
   };
 
@@ -345,7 +418,7 @@ function FilmFormatVisualizer() {
     <div className="p-6 grid gap-6 md:grid-cols-12">
       {/* Controls (collapsible) */}
       {!controlsCollapsed ? (
-        <div className="col-span-12 md:col-span-5 lg:col-span-4 min-w-0 border rounded-2xl p-4 bg-white shadow-sm relative">
+        <div id="controls" className="col-span-12 md:col-span-5 lg:col-span-4 min-w-0 border rounded-2xl p-4 bg-white shadow-sm relative order-2">
           <button
             onClick={() => setControlsCollapsed(true)}
             className="absolute right-3 top-3 px-2 py-1 text-xs border rounded-md"
@@ -418,7 +491,7 @@ function FilmFormatVisualizer() {
           )}
 
           {/* Formats list */}
-          <div className="space-y-2 max-h-72 overflow-auto pr-1">
+      <div className="space-y-2 pr-1">
             <div className="flex items-center justify-between">
               <div className="text-sm font-medium">Formats</div>
               <div className="flex gap-2">
@@ -455,7 +528,7 @@ function FilmFormatVisualizer() {
       )}
 
       {/* Visualizer */}
-      <div className={`col-span-12 ${controlsCollapsed ? "md:col-span-12" : "md:col-span-7 lg:col-span-8"} min-w-0 border rounded-2xl p-4 bg-white shadow-sm`}>
+      <div className={`col-span-12 ${controlsCollapsed ? "md:col-span-12" : "md:col-span-7 lg:col-span-8"} min-w-0 border rounded-2xl p-4 bg-white shadow-sm order-1`}>
         <h2 className="text-lg font-semibold mb-4">{mode === 'interactive' ? 'Interactive Grid' : 'Visualizer'}</h2>
         {mode === "overlay" ? (
           <div ref={overlayScrollRef} className="relative w-full overflow-auto border rounded-xl p-4 bg-white min-h-[320px]">
@@ -483,34 +556,53 @@ function FilmFormatVisualizer() {
             ))}
           </div>
         ) : (
-          <div className="relative w-full overflow-auto border rounded-xl p-4 bg-white" ref={interactiveRef}>
-            <div className="relative" style={{ width: Math.max(320, posBounds.w + 24), height: Math.max(240, posBounds.h + 24) }}>
-              {selected.map((fmt) => {
-                const pos = positions[fmt.id] || { x: 0, y: 0 };
-                return (
-                  <div
-                    key={fmt.id}
-                    className="absolute select-none"
-                    style={{ left: pos.x, top: pos.y, cursor: 'grab', zIndex: zIndexMap[fmt.id] || 1 }}
-                    onPointerDown={onDragStart(fmt.id)}
-                  >
-                    <div className="flex flex-col items-center gap-2 p-2 bg-white/80 rounded-lg border shadow-sm" style={{ opacity: interactiveOpacity }}>
-                      <FilmFrame fmt={fmt} scale={scale} showFilmStock={showFilmStock} showPerfs={showPerfs} fillOverride={interactiveOpacity} />
-                      <div className="text-center text-xs text-stone-600 max-w-[220px]">
-                        <div className="font-medium text-stone-800">{fmt.label}</div>
-                        <div>{fmt.imageMm.w.toFixed(2)} × {fmt.imageMm.h.toFixed(2)} mm (<Aspect w={fmt.imageMm.w} h={fmt.imageMm.h} />)</div>
-                      </div>
+          isMobile ? (
+            <div className="w-full border rounded-xl p-3 bg-white" ref={interactiveRef}>
+              <div className="flex flex-col gap-3">
+                {selected.map((fmt) => (
+                  <div key={fmt.id} className="w-full flex flex-col items-center p-2 bg-white/80 rounded-lg border shadow-sm" style={{ opacity: interactiveOpacity }}>
+                    <FilmFrame fmt={fmt} scale={fitScale || scale} showFilmStock={showFilmStock} showPerfs={showPerfs} fillOverride={interactiveOpacity} />
+                    <div className="text-center text-xs text-stone-600 max-w-full">
+                      <div className="font-medium text-stone-800">{fmt.label}</div>
+                      <div>{fmt.imageMm.w.toFixed(2)} × {fmt.imageMm.h.toFixed(2)} mm (<Aspect w={fmt.imageMm.w} h={fmt.imageMm.h} />)</div>
                     </div>
                   </div>
-                );
-              })}
+                ))}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="relative w-full overflow-auto border rounded-xl p-4 bg-white" ref={interactiveRef} style={{ touchAction: 'none' }}>
+              <div style={{ position: 'relative', width: Math.max(320, (posBounds.w + 24) * canvasScale), height: Math.max(240, (posBounds.h + 24) * canvasScale) }}>
+                <div className="relative" style={{ width: Math.max(320, posBounds.w + 24), height: Math.max(240, posBounds.h + 24), transform: `scale(${canvasScale})`, transformOrigin: 'top left' }}>
+                {selected.map((fmt) => {
+                  const pos = positions[fmt.id] || { x: 0, y: 0 };
+                  return (
+                    <div
+                      key={fmt.id}
+                      className="absolute select-none"
+                      style={{ left: pos.x, top: pos.y, cursor: 'grab', zIndex: zIndexMap[fmt.id] || 1, touchAction: 'none' }}
+                      onPointerDown={onDragStart(fmt.id)}
+                      onTouchStart={onDragStart(fmt.id)}
+                    >
+                      <div className="flex flex-col items-center gap-2 p-2 bg-white/80 rounded-lg border shadow-sm" style={{ opacity: interactiveOpacity }}>
+                        <FilmFrame fmt={fmt} scale={scale} showFilmStock={showFilmStock} showPerfs={showPerfs} fillOverride={interactiveOpacity} />
+                        <div className="text-center text-xs text-stone-600 max-w-[220px]">
+                          <div className="font-medium text-stone-800">{fmt.label}</div>
+                          <div>{fmt.imageMm.w.toFixed(2)} × {fmt.imageMm.h.toFixed(2)} mm (<Aspect w={fmt.imageMm.w} h={fmt.imageMm.h} />)</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                </div>
+              </div>
+            </div>
+          )
         ))}
       </div>
 
       {/* Notes (moved out of details so always visible) */}
-      <div className="col-span-12 border rounded-2xl p-4 bg-white shadow-sm">
+      <div className="col-span-12 border rounded-2xl p-4 bg-white shadow-sm order-last">
         <h2 className="text-lg font-semibold mb-2">Notes</h2>
         <div className="text-xs text-stone-500 leading-relaxed">
           <p><strong>Legend & caveats:</strong> Gate sizes are typical camera/negative image areas. Projection and blow‑up apertures differ. Perforations shown are schematic (count & orientation) rather than exact pitch or profile (BH, KS, IMAX). Perfs indicate count/orientation and may not align exactly with gates or film edges.</p>
@@ -521,11 +613,11 @@ function FilmFormatVisualizer() {
 
       {/* Editable table (collapsible) */}
       {detailsCollapsed ? (
-        <div className="col-span-12">
+        <div className="col-span-12 order-last">
           <button onClick={() => setDetailsCollapsed(false)} className="px-3 py-1 border rounded-md">Show format details</button>
         </div>
       ) : (
-        <div className="col-span-12 border rounded-2xl p-4 bg-white shadow-sm">
+        <div className="col-span-12 border rounded-2xl p-4 bg-white shadow-sm order-last">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Format Details & Edits</h2>
             <div className="flex gap-2">
