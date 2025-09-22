@@ -40,3 +40,13 @@ git branch -M main
 ```
 
 Then create a remote and push as needed.
+
+## GitHub Pages
+
+This repo includes a GitHub Actions workflow that publishes the site to GitHub Pages on every push to `main`.
+
+- First push triggers the workflow automatically.
+- Pages URL (once deployed): `https://f0rmwk.github.io/film_format_visualizer/`
+- A `.nojekyll` file is included to ensure assets aren’t processed by Jekyll.
+
+If Pages isn’t enabled automatically, in GitHub go to: Settings → Pages → Build and deployment → Source → GitHub Actions.
