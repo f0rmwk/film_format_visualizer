@@ -24,12 +24,24 @@ Live demo: https://f0rmwk.github.io/film_format_visualizer/
 ## Features
 
 - Overlay and Grid views to compare formats
+- Interactive Grid mode: drag-and-drop layout with adjustable opacity
 - Adjustable scale (px/mm), fill opacity, and outline width
 - Toggle film stock and perforations
 - Overlay order controls (when in Overlay): As selected, Small → Top, Large → Top
 - Format selection helpers: Select all, Clear, Invert
 - Editable format data (sizes, perfs, transport) with Reset to defaults
 - Collapsible controls and details to reduce clutter
+
+## Interactive Mode
+
+- Mode: Select `Interactive` beside `Overlay` and `Grid`.
+- Drag and drop: Click/tap and drag any format card to reposition it.
+- On-top while dragging: The active card rises above others for clarity.
+- Interactive opacity: Slider controls transparency of the draggable cards for easier comparison.
+- Reset layout: Restores the built-in default positions and z-order.
+- Stable spots: Adding/removing formats keeps their specified default spots; others don’t shift.
+- Auto-sizing: The canvas resizes to fit placed cards, avoiding excess empty space.
+- Persistence: Defaults are hard-coded; no file/local storage is required.
 
 ## Run locally
 
