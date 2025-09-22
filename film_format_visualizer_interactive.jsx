@@ -436,14 +436,14 @@ function FilmFormatVisualizer() {
             {/* Hidden ghost grid to measure Grid layout positions */}
             <div
               ref={ghostGridRef}
-              style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none', inset: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem' }}
+              style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none', inset: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', columnGap: '1rem', rowGap: '0.5rem' }}
             >
               {selected.map((fmt) => (
-                <div key={`ghost-${fmt.id}`} className="flex flex-col items-center gap-2 p-2 rounded-lg border">
+                <div key={`ghost-${fmt.id}`} className="flex flex-col items-center gap-2 p-2 bg-white/80 rounded-lg border shadow-sm">
                   <FilmFrame fmt={fmt} scale={scale} showFilmStock={showFilmStock} showPerfs={showPerfs} />
-                  <div className="text-center text-sm">
-                    <div className="font-medium">{fmt.label}</div>
-                    <div className="text-stone-600">{fmt.imageMm.w.toFixed(2)} × {fmt.imageMm.h.toFixed(2)} mm (<Aspect w={fmt.imageMm.w} h={fmt.imageMm.h} />)</div>
+                  <div className="text-center text-xs text-stone-600 max-w-[220px]">
+                    <div className="font-medium text-stone-800">{fmt.label}</div>
+                    <div>{fmt.imageMm.w.toFixed(2)} × {fmt.imageMm.h.toFixed(2)} mm (<Aspect w={fmt.imageMm.w} h={fmt.imageMm.h} />)</div>
                   </div>
                 </div>
               ))}
