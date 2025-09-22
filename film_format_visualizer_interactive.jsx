@@ -72,6 +72,8 @@ function FilmFormatVisualizer() {
   const STEP_X = 260; // approx card width + gap
   const STEP_Y = 240; // approx card height + gap
   const [ghostSize, setGhostSize] = useState({ w: 800, h: 500 });
+  const LOCAL_STORAGE_KEY = 'ffv_interactive_positions_default_v1';
+  const [defaultApplied, setDefaultApplied] = useState(false);
 
   const selected = useMemo(() => formats.filter((f) => activeIds.includes(f.id)), [formats, activeIds]);
 
@@ -132,9 +134,30 @@ function FilmFormatVisualizer() {
     });
   };
 
-  // Initialize layout by measuring ghost grid (matches Grid mode)
+  // Initialize layout by measuring ghost grid (matches Grid mode) or applying saved default
   useEffect(() => {
     if (mode !== "interactive") return;
+    if (!defaultApplied) {
+      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+      if (saved) {
+        try {
+          const data = JSON.parse(saved);
+          const factor = data?.scale ? (scale / data.scale) : 1;
+          const next = {};
+          selected.forEach((fmt) => {
+            const p = data.positions?.[fmt.id];
+            if (p) next[fmt.id] = { x: p.x * factor, y: p.y * factor };
+          });
+          if (Object.keys(next).length) {
+            setPositions(next);
+            if (data.zIndexMap) setZIndexMap(data.zIndexMap);
+            setDefaultApplied(true);
+            return;
+          }
+        } catch {}
+      }
+      setDefaultApplied(true);
+    }
     resetInteractiveLayout();
   }, [mode, selected, scale]);
 
@@ -289,6 +312,16 @@ function FilmFormatVisualizer() {
   // Derive canvas size for Interactive mode
   const colsForCanvas = interactiveCols || 3;
   const rowsForCanvas = Math.max(1, Math.ceil(selected.length / colsForCanvas));
+  const posBounds = useMemo(() => {
+    let maxX = 0, maxY = 0;
+    for (const id of Object.keys(positions)) {
+      const p = positions[id];
+      if (!p) continue;
+      maxX = Math.max(maxX, p.x);
+      maxY = Math.max(maxY, p.y);
+    }
+    return { w: maxX + STEP_X, h: maxY + STEP_Y };
+  }, [positions]);
 
   return (
     <div className="p-6 grid gap-6 md:grid-cols-12">
@@ -360,8 +393,28 @@ function FilmFormatVisualizer() {
                 <input id="interactiveFill" type="range" min={0} max={0.9} step={0.01} value={interactiveOpacity} onChange={(e) => setInteractiveOpacity(parseFloat(e.target.value))} className="w-full" />
                 <span className="w-14 text-right tabular-nums">{interactiveOpacity.toFixed(2)}</span>
               </div>
-              <div className="mt-2">
+              <div className="mt-2 flex gap-2 flex-wrap">
                 <button className="px-3 py-1 text-sm border rounded-md" onClick={resetInteractiveLayout}>Reset layout</button>
+                <button
+                  className="px-3 py-1 text-sm border rounded-md"
+                  onClick={() => {
+                    const payload = { version: 1, scale, positions, zIndexMap };
+                    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+                    const a = document.createElement('a');
+                    a.href = URL.createObjectURL(blob);
+                    a.download = 'interactive_positions.json';
+                    a.click();
+                    URL.revokeObjectURL(a.href);
+                  }}
+                >Export positions</button>
+                <button
+                  className="px-3 py-1 text-sm border rounded-md"
+                  onClick={() => {
+                    const payload = { version: 1, scale, positions, zIndexMap };
+                    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(payload));
+                  }}
+                >Save as default</button>
+                <button className="px-3 py-1 text-sm border rounded-md" onClick={() => { localStorage.removeItem(LOCAL_STORAGE_KEY); setDefaultApplied(false); }}>Clear default</button>
               </div>
             </div>
           )}
@@ -448,7 +501,7 @@ function FilmFormatVisualizer() {
                 </div>
               ))}
             </div>
-            <div className="relative" style={{ width: Math.max(ghostSize.w + 32, colsForCanvas * STEP_X + 100), height: Math.max(ghostSize.h + 32, rowsForCanvas * STEP_Y + 100) }}>
+            <div className="relative" style={{ width: Math.max(ghostSize.w + 32, colsForCanvas * STEP_X + 100, posBounds.w + 100), height: Math.max(ghostSize.h + 32, rowsForCanvas * STEP_Y + 100, posBounds.h + 100) }}>
               {selected.map((fmt) => {
                 const pos = positions[fmt.id] || { x: 0, y: 0 };
                 return (

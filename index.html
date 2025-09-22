@@ -85,6 +85,8 @@
         const STEP_X = 260; // card width + gap
         const STEP_Y = 240; // card height + gap
         const [ghostSize, setGhostSize] = useState({ w: 800, h: 500 });
+        const LOCAL_STORAGE_KEY = 'ffv_interactive_positions_default_v1';
+        const [defaultApplied, setDefaultApplied] = useState(false);
 
         const selected = useMemo(() => formats.filter((f) => activeIds.includes(f.id)), [formats, activeIds]);
 
@@ -143,9 +145,30 @@
           });
         };
 
-        // Interactive grid: initialize by measuring ghost grid
+        // Interactive grid: initialize by measuring ghost grid or applying saved default
         useEffect(() => {
           if (mode !== 'interactive') return;
+          if (!defaultApplied) {
+            const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+            if (saved) {
+              try {
+                const data = JSON.parse(saved);
+                const factor = data?.scale ? (scale / data.scale) : 1;
+                const next = {};
+                selected.forEach((fmt) => {
+                  const p = data.positions?.[fmt.id];
+                  if (p) next[fmt.id] = { x: p.x * factor, y: p.y * factor };
+                });
+                if (Object.keys(next).length) {
+                  setPositions(next);
+                  if (data.zIndexMap) setZIndexMap(data.zIndexMap);
+                  setDefaultApplied(true);
+                  return;
+                }
+              } catch {}
+            }
+            setDefaultApplied(true);
+          }
           resetInteractiveLayout();
         }, [mode, selected, scale]);
 
@@ -359,9 +382,23 @@
                       <input id="interactiveFill" type="range" min={0} max={0.9} step={0.01} value={interactiveOpacity} onChange={(e) => setInteractiveOpacity(parseFloat(e.target.value))} className="w-full" />
                       <span className="w-14 text-right tabular-nums">{interactiveOpacity.toFixed(2)}</span>
                     </div>
-                    <div className="mt-2">
-                      <button className="px-3 py-1 text-sm border rounded-md" onClick={resetInteractiveLayout}>Reset layout</button>
-                    </div>
+                  <div className="mt-2 flex gap-2 flex-wrap">
+                    <button className="px-3 py-1 text-sm border rounded-md" onClick={resetInteractiveLayout}>Reset layout</button>
+                    <button className="px-3 py-1 text-sm border rounded-md" onClick={() => {
+                      const payload = { version: 1, scale, positions, zIndexMap };
+                      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+                      const a = document.createElement('a');
+                      a.href = URL.createObjectURL(blob);
+                      a.download = 'interactive_positions.json';
+                      a.click();
+                      URL.revokeObjectURL(a.href);
+                    }}>Export positions</button>
+                    <button className="px-3 py-1 text-sm border rounded-md" onClick={() => {
+                      const payload = { version: 1, scale, positions, zIndexMap };
+                      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(payload));
+                    }}>Save as default</button>
+                    <button className="px-3 py-1 text-sm border rounded-md" onClick={() => { localStorage.removeItem(LOCAL_STORAGE_KEY); setDefaultApplied(false); }}>Clear default</button>
+                  </div>
                   </div>
                 )}
 
