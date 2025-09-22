@@ -75,6 +75,7 @@
         const [detailsCollapsed, setDetailsCollapsed] = useState(true);
         const overlayScrollRef = useRef(null);
         const interactiveRef = useRef(null);
+        const ghostGridRef = useRef(null);
         const dragStateRef = useRef(null);
         const [positions, setPositions] = useState({});
         const [interactiveOpacity, setInteractiveOpacity] = useState(0.7);
@@ -83,6 +84,7 @@
         const [interactiveCols, setInteractiveCols] = useState(3);
         const STEP_X = 260; // card width + gap
         const STEP_Y = 240; // card height + gap
+        const [ghostSize, setGhostSize] = useState({ w: 800, h: 500 });
 
         const selected = useMemo(() => formats.filter((f) => activeIds.includes(f.id)), [formats, activeIds]);
 
@@ -116,50 +118,36 @@
         }, [mode, scale, maxGate.w, maxGate.h, controlsCollapsed, selectedSorted.length]);
 
         const resetInteractiveLayout = () => {
-          const container = interactiveRef.current;
-          let cols = 3;
-          if (container && container.clientWidth) {
-            cols = Math.max(1, Math.floor((container.clientWidth - 16) / STEP_X));
-          }
-          setInteractiveCols(cols);
-          setPositions(() => {
+          const grid = ghostGridRef.current;
+          if (!grid) return;
+          requestAnimationFrame(() => {
+            const containerRect = grid.getBoundingClientRect();
+            const children = Array.from(grid.children);
             const next = {};
-            let i = 0;
-            for (const fmt of selected) {
-              const col = i % cols;
-              const row = Math.floor(i / cols);
-              next[fmt.id] = { x: col * STEP_X, y: row * STEP_Y };
-              i++;
+            children.forEach((el, i) => {
+              const rect = el.getBoundingClientRect();
+              const id = selected[i]?.id;
+              if (id) next[id] = { x: rect.left - containerRect.left, y: rect.top - containerRect.top };
+            });
+            if (children.length) {
+              const firstTop = children[0].getBoundingClientRect().top;
+              let cols = 0;
+              for (const el of children) {
+                const t = el.getBoundingClientRect().top;
+                if (Math.abs(t - firstTop) < 2) cols++; else break;
+              }
+              if (cols > 0) setInteractiveCols(cols);
             }
-            return next;
+            setPositions(next);
+            setGhostSize({ w: grid.scrollWidth, h: grid.scrollHeight });
           });
         };
 
-        // Interactive grid: initialize tiled layout similar to Grid when entering or changing selection
+        // Interactive grid: initialize by measuring ghost grid
         useEffect(() => {
           if (mode !== 'interactive') return;
-          const container = interactiveRef.current;
-          let cols = 3;
-          if (container && container.clientWidth) {
-            cols = Math.max(1, Math.floor((container.clientWidth - 16) / STEP_X));
-          }
-          setInteractiveCols(cols);
-          setPositions((prev) => {
-            const next = { ...prev };
-            let i = 0;
-            for (const fmt of selected) {
-              if (!(fmt.id in next)) {
-                const col = i % cols;
-                const row = Math.floor(i / cols);
-                next[fmt.id] = { x: col * STEP_X, y: row * STEP_Y };
-              }
-              i++;
-            }
-            const keep = new Set(selected.map((f) => f.id));
-            for (const k of Object.keys(next)) if (!keep.has(k)) delete next[k];
-            return next;
-          });
-        }, [mode, selected]);
+          resetInteractiveLayout();
+        }, [mode, selected, scale]);
 
         const onDragStart = (id) => (e) => {
           if (mode !== 'interactive') return;
@@ -439,7 +427,21 @@
                 </div>
               ) : (
                 <div className="relative w-full overflow-auto border rounded-xl p-4 bg-white min-h-[420px]" ref={interactiveRef}>
-                  <div className="relative" style={{ width: Math.max(800, (interactiveCols || 3) * 260 + 100), height: Math.max(500, Math.max(1, Math.ceil(selected.length / (interactiveCols || 3))) * 240 + 100) }}>
+                  <div
+                    ref={ghostGridRef}
+                    style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none', inset: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem' }}
+                  >
+                    {selected.map((fmt) => (
+                      <div key={`ghost-${fmt.id}`} className="flex flex-col items-center gap-2">
+                        <FilmFrame fmt={fmt} scale={scale} showFilmStock={showFilmStock} showPerfs={showPerfs} />
+                        <div className="text-center text-sm">
+                          <div className="font-medium">{fmt.label}</div>
+                          <div className="text-stone-600">{fmt.imageMm.w.toFixed(2)} × {fmt.imageMm.h.toFixed(2)} mm (<Aspect w={fmt.imageMm.w} h={fmt.imageMm.h} />)</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="relative" style={{ width: Math.max(ghostSize.w + 32, (interactiveCols || 3) * STEP_X + 100), height: Math.max(ghostSize.h + 32, Math.max(1, Math.ceil(selected.length / (interactiveCols || 3))) * STEP_Y + 100) }}>
                     {selected.map((fmt) => {
                       const pos = positions[fmt.id] || { x: 0, y: 0 };
                       return (

@@ -62,6 +62,7 @@ function FilmFormatVisualizer() {
   const [detailsCollapsed, setDetailsCollapsed] = useState(true); // collapse Format Details by default
   const overlayScrollRef = useRef(null);
   const interactiveRef = useRef(null);
+  const ghostGridRef = useRef(null);
   const dragStateRef = useRef(null);
   const [positions, setPositions] = useState({}); // id -> {x, y}
   const [interactiveOpacity, setInteractiveOpacity] = useState(0.7);
@@ -70,6 +71,7 @@ function FilmFormatVisualizer() {
   const [interactiveCols, setInteractiveCols] = useState(3);
   const STEP_X = 260; // approx card width + gap
   const STEP_Y = 240; // approx card height + gap
+  const [ghostSize, setGhostSize] = useState({ w: 800, h: 500 });
 
   const selected = useMemo(() => formats.filter((f) => activeIds.includes(f.id)), [formats, activeIds]);
 
@@ -103,51 +105,38 @@ function FilmFormatVisualizer() {
   }, [mode, scale, maxGate.w, maxGate.h, controlsCollapsed, selectedSorted.length]);
 
   const resetInteractiveLayout = () => {
-    const container = interactiveRef.current;
-    let cols = 3;
-    if (container && container.clientWidth) {
-      cols = Math.max(1, Math.floor((container.clientWidth - 16) / STEP_X));
-    }
-    setInteractiveCols(cols);
-    setPositions(() => {
+    // Measure from ghost grid to get exact positions matching Grid mode
+    const grid = ghostGridRef.current;
+    if (!grid) return;
+    requestAnimationFrame(() => {
+      const containerRect = grid.getBoundingClientRect();
+      const children = Array.from(grid.children);
       const next = {};
-      let i = 0;
-      for (const fmt of selected) {
-        const col = i % cols;
-        const row = Math.floor(i / cols);
-        next[fmt.id] = { x: col * STEP_X, y: row * STEP_Y };
-        i++;
+      children.forEach((el, i) => {
+        const rect = el.getBoundingClientRect();
+        const id = selected[i]?.id;
+        if (id) next[id] = { x: rect.left - containerRect.left, y: rect.top - containerRect.top };
+      });
+      // compute columns by counting first row items
+      if (children.length) {
+        const firstTop = children[0].getBoundingClientRect().top;
+        let cols = 0;
+        for (const el of children) {
+          const t = el.getBoundingClientRect().top;
+          if (Math.abs(t - firstTop) < 2) cols++; else break;
+        }
+        if (cols > 0) setInteractiveCols(cols);
       }
-      return next;
+      setPositions(next);
+      setGhostSize({ w: grid.scrollWidth, h: grid.scrollHeight });
     });
   };
 
-  // Initialize tiled layout (matching Grid flow) when entering interactive mode or selection changes
+  // Initialize layout by measuring ghost grid (matches Grid mode)
   useEffect(() => {
     if (mode !== "interactive") return;
-    // Only place new items; keep existing positions
-    const container = interactiveRef.current;
-    let cols = 3;
-    if (container && container.clientWidth) {
-      cols = Math.max(1, Math.floor((container.clientWidth - 16) / STEP_X));
-    }
-    setInteractiveCols(cols);
-    setPositions((prev) => {
-      const next = { ...prev };
-      let i = 0;
-      for (const fmt of selected) {
-        if (!(fmt.id in next)) {
-          const col = i % cols;
-          const row = Math.floor(i / cols);
-          next[fmt.id] = { x: col * STEP_X, y: row * STEP_Y };
-        }
-        i++;
-      }
-      const keep = new Set(selected.map((f) => f.id));
-      for (const k of Object.keys(next)) if (!keep.has(k)) delete next[k];
-      return next;
-    });
-  }, [mode, selected]);
+    resetInteractiveLayout();
+  }, [mode, selected, scale]);
 
   const onDragStart = (id) => (e) => {
     if (mode !== "interactive") return;
@@ -444,7 +433,22 @@ function FilmFormatVisualizer() {
           </div>
         ) : (
           <div className="relative w-full overflow-auto border rounded-xl p-4 bg-white min-h-[420px]" ref={interactiveRef}>
-            <div className="relative" style={{ width: Math.max(800, colsForCanvas * 260 + 100), height: Math.max(500, rowsForCanvas * 240 + 100) }}>
+            {/* Hidden ghost grid to measure Grid layout positions */}
+            <div
+              ref={ghostGridRef}
+              style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none', inset: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem' }}
+            >
+              {selected.map((fmt) => (
+                <div key={`ghost-${fmt.id}`} className="flex flex-col items-center gap-2">
+                  <FilmFrame fmt={fmt} scale={scale} showFilmStock={showFilmStock} showPerfs={showPerfs} />
+                  <div className="text-center text-sm">
+                    <div className="font-medium">{fmt.label}</div>
+                    <div className="text-stone-600">{fmt.imageMm.w.toFixed(2)} × {fmt.imageMm.h.toFixed(2)} mm (<Aspect w={fmt.imageMm.w} h={fmt.imageMm.h} />)</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="relative" style={{ width: Math.max(ghostSize.w + 32, colsForCanvas * STEP_X + 100), height: Math.max(ghostSize.h + 32, rowsForCanvas * STEP_Y + 100) }}>
               {selected.map((fmt) => {
                 const pos = positions[fmt.id] || { x: 0, y: 0 };
                 return (
