@@ -64,6 +64,9 @@ function FilmFormatVisualizer() {
   const interactiveRef = useRef(null);
   const dragStateRef = useRef(null);
   const [positions, setPositions] = useState({}); // id -> {x, y}
+  const [interactiveOpacity, setInteractiveOpacity] = useState(0.32);
+  const zCounterRef = useRef(1);
+  const [zIndexMap, setZIndexMap] = useState({}); // id -> zIndex
 
   const selected = useMemo(() => formats.filter((f) => activeIds.includes(f.id)), [formats, activeIds]);
 
@@ -130,6 +133,10 @@ function FilmFormatVisualizer() {
       offsetX: clientX - (rect.left + pos.x),
       offsetY: clientY - (rect.top + pos.y),
     };
+    // Bring to front
+    const nextZ = (zCounterRef.current || 1) + 1;
+    zCounterRef.current = nextZ;
+    setZIndexMap((prev) => ({ ...prev, [id]: nextZ }));
     window.addEventListener("pointermove", onDragMove);
     window.addEventListener("pointerup", onDragEnd, { once: true });
   };
@@ -176,7 +183,7 @@ function FilmFormatVisualizer() {
   };
 
   // Inner component: separate fill/stroke opacity; larger IMAX/VV perf height for visibility
-  function FilmFrame({ fmt, scale, showFilmStock, showPerfs }) {
+  function FilmFrame({ fmt, scale, showFilmStock, showPerfs, fillOverride }) {
     const { imageMm, gaugeMm, orientation, perfsPerFrame, perfDirection } = fmt;
 
     const sideMargin = Math.max((gaugeMm - imageMm.w) / 2, gaugeMm * 0.08);
@@ -249,7 +256,7 @@ function FilmFormatVisualizer() {
           height={imageMm.h}
           style={{
             fill: color,
-            fillOpacity: fillOpacity,
+            fillOpacity: fillOverride ?? fillOpacity,
             stroke: color,
             strokeOpacity: 1,
             strokeWidth: strokeWidth,
@@ -322,6 +329,16 @@ function FilmFormatVisualizer() {
             <button onClick={() => setMode("grid")} className={`px-3 py-1 rounded-md border ${mode === "grid" ? "bg-black text-white" : "bg-white"}`}>Grid</button>
             <button onClick={() => setMode("interactive")} className={`px-3 py-1 rounded-md border ${mode === "interactive" ? "bg-black text-white" : "bg-white"}`}>Interactive</button>
           </div>
+
+          {mode === "interactive" && (
+            <div className="mb-4">
+              <label className="block text-sm mb-1" htmlFor="interactiveFill">Interactive fill opacity</label>
+              <div className="flex items-center gap-3">
+                <input id="interactiveFill" type="range" min={0} max={0.9} step={0.01} value={interactiveOpacity} onChange={(e) => setInteractiveOpacity(parseFloat(e.target.value))} className="w-full" />
+                <span className="w-14 text-right tabular-nums">{interactiveOpacity.toFixed(2)}</span>
+              </div>
+            </div>
+          )}
 
           {/* Formats list */}
           <div className="space-y-2 max-h-72 overflow-auto pr-1">
@@ -397,11 +414,11 @@ function FilmFormatVisualizer() {
                   <div
                     key={fmt.id}
                     className="absolute select-none"
-                    style={{ left: pos.x, top: pos.y, cursor: 'grab' }}
+                    style={{ left: pos.x, top: pos.y, cursor: 'grab', zIndex: zIndexMap[fmt.id] || 1 }}
                     onPointerDown={onDragStart(fmt.id)}
                   >
                     <div className="flex flex-col items-center gap-2 p-2 bg-white/80 rounded-lg border shadow-sm">
-                      <FilmFrame fmt={fmt} scale={scale} showFilmStock={showFilmStock} showPerfs={showPerfs} />
+                      <FilmFrame fmt={fmt} scale={scale} showFilmStock={showFilmStock} showPerfs={showPerfs} fillOverride={interactiveOpacity} />
                       <div className="text-center text-xs text-stone-600 max-w-[220px]">
                         <div className="font-medium text-stone-800">{fmt.label}</div>
                         <div>{fmt.imageMm.w.toFixed(2)} × {fmt.imageMm.h.toFixed(2)} mm (<Aspect w={fmt.imageMm.w} h={fmt.imageMm.h} />)</div>
