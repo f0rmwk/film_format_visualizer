@@ -157,29 +157,14 @@
         }, [mode, scale, maxGate.w, maxGate.h, controlsCollapsed, selectedSorted.length]);
 
         const resetInteractiveLayout = () => {
-          const grid = ghostGridRef.current;
-          if (!grid) return;
-          requestAnimationFrame(() => {
-            const containerRect = grid.getBoundingClientRect();
-            const children = Array.from(grid.children);
-            const next = {};
-            children.forEach((el, i) => {
-              const rect = el.getBoundingClientRect();
-              const id = selected[i]?.id;
-              if (id) next[id] = { x: rect.left - containerRect.left, y: rect.top - containerRect.top };
-            });
-            if (children.length) {
-              const firstTop = children[0].getBoundingClientRect().top;
-              let cols = 0;
-              for (const el of children) {
-                const t = el.getBoundingClientRect().top;
-                if (Math.abs(t - firstTop) < 2) cols++; else break;
-              }
-              if (cols > 0) setInteractiveCols(cols);
-            }
-            setPositions(next);
-            setGhostSize({ w: grid.scrollWidth, h: grid.scrollHeight });
+          const factor = DEFAULT_LAYOUT?.scale ? (scale / DEFAULT_LAYOUT.scale) : 1;
+          const next = {};
+          selected.forEach((fmt) => {
+            const p = DEFAULT_LAYOUT.positions?.[fmt.id];
+            if (p) next[fmt.id] = { x: p.x * factor, y: p.y * factor };
           });
+          setPositions(next);
+          if (DEFAULT_LAYOUT.zIndexMap) setZIndexMap(DEFAULT_LAYOUT.zIndexMap);
         };
 
         // Interactive grid: initialize by applying hard-coded default once, else measure ghost grid
@@ -481,21 +466,7 @@
                 </div>
               ) : (
                 <div className="relative w-full overflow-auto border rounded-xl p-4 bg-white min-h-[420px]" ref={interactiveRef}>
-                  <div
-                    ref={ghostGridRef}
-                    style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none', inset: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', columnGap: '1rem', rowGap: '0.5rem' }}
-                  >
-                    {selected.map((fmt) => (
-                      <div key={`ghost-${fmt.id}`} className="flex flex-col items-center gap-2 p-2 bg-white/80 rounded-lg border shadow-sm">
-                        <FilmFrame fmt={fmt} scale={scale} showFilmStock={showFilmStock} showPerfs={showPerfs} />
-                        <div className="text-center text-xs text-stone-600 max-w-[220px]">
-                          <div className="font-medium text-stone-800">{fmt.label}</div>
-                          <div>{fmt.imageMm.w.toFixed(2)} × {fmt.imageMm.h.toFixed(2)} mm (<Aspect w={fmt.imageMm.w} h={fmt.imageMm.h} />)</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="relative" style={{ width: Math.max(ghostSize.w + 32, (interactiveCols || 3) * STEP_X + 100), height: Math.max(ghostSize.h + 32, Math.max(1, Math.ceil(selected.length / (interactiveCols || 3))) * STEP_Y + 100) }}>
+                  <div className="relative" style={{ width: (() => { let maxX=0; selected.forEach(fmt => { const p=positions[fmt.id]; if (p) maxX=Math.max(maxX,p.x);}); return Math.max((interactiveCols || 3) * STEP_X + 100, maxX + STEP_X + 100); })(), height: (() => { let maxY=0; selected.forEach(fmt => { const p=positions[fmt.id]; if (p) maxY=Math.max(maxY,p.y);}); return Math.max(Math.max(1, Math.ceil(selected.length / (interactiveCols || 3))) * STEP_Y + 100, maxY + STEP_Y + 100); })() }}>
                     {selected.map((fmt) => {
                       const pos = positions[fmt.id] || { x: 0, y: 0 };
                       return (

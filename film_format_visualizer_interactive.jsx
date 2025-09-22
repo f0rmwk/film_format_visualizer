@@ -146,53 +146,37 @@ function FilmFormatVisualizer() {
   }, [mode, scale, maxGate.w, maxGate.h, controlsCollapsed, selectedSorted.length]);
 
   const resetInteractiveLayout = () => {
-    // Measure from ghost grid to get exact positions matching Grid mode
-    const grid = ghostGridRef.current;
-    if (!grid) return;
-    requestAnimationFrame(() => {
-      const containerRect = grid.getBoundingClientRect();
-      const children = Array.from(grid.children);
-      const next = {};
-      children.forEach((el, i) => {
-        const rect = el.getBoundingClientRect();
-        const id = selected[i]?.id;
-        if (id) next[id] = { x: rect.left - containerRect.left, y: rect.top - containerRect.top };
-      });
-      // compute columns by counting first row items
-      if (children.length) {
-        const firstTop = children[0].getBoundingClientRect().top;
-        let cols = 0;
-        for (const el of children) {
-          const t = el.getBoundingClientRect().top;
-          if (Math.abs(t - firstTop) < 2) cols++; else break;
-        }
-        if (cols > 0) setInteractiveCols(cols);
-      }
-      setPositions(next);
-      setGhostSize({ w: grid.scrollWidth, h: grid.scrollHeight });
+    const factor = DEFAULT_LAYOUT?.scale ? (scale / DEFAULT_LAYOUT.scale) : 1;
+    const next = {};
+    selected.forEach((fmt) => {
+      const p = DEFAULT_LAYOUT.positions?.[fmt.id];
+      if (p) next[fmt.id] = { x: p.x * factor, y: p.y * factor };
     });
+    setPositions(next);
+    if (DEFAULT_LAYOUT.zIndexMap) setZIndexMap(DEFAULT_LAYOUT.zIndexMap);
   };
 
-  // Initialize layout by applying hard-coded default once, else measure ghost grid
+  // Initialize layout by applying hard-coded default; maintain positions when selection changes
   useEffect(() => {
     if (mode !== "interactive") return;
     if (!defaultApplied) {
-      const factor = DEFAULT_LAYOUT?.scale ? (scale / DEFAULT_LAYOUT.scale) : 1;
-      const next = {};
-      selected.forEach((fmt) => {
-        const p = DEFAULT_LAYOUT.positions?.[fmt.id];
-        if (p) next[fmt.id] = { x: p.x * factor, y: p.y * factor };
-      });
-      if (Object.keys(next).length) {
-        setPositions(next);
-        if (DEFAULT_LAYOUT.zIndexMap) setZIndexMap(DEFAULT_LAYOUT.zIndexMap);
-        setDefaultApplied(true);
-        return;
-      }
+      // First entry: set all selected to defaults
+      resetInteractiveLayout();
       setDefaultApplied(true);
+    } else {
+      // Later: add defaults for any new selections, keep existing positions for others
+      const factor = DEFAULT_LAYOUT?.scale ? (scale / DEFAULT_LAYOUT.scale) : 1;
+      setPositions((prev) => {
+        const next = { ...prev };
+        for (const fmt of selected) {
+          if (!(fmt.id in next)) {
+            const p = DEFAULT_LAYOUT.positions?.[fmt.id];
+            if (p) next[fmt.id] = { x: p.x * factor, y: p.y * factor };
+          }
+        }
+        return next;
+      });
     }
-    // Fallback to measured grid
-    resetInteractiveLayout();
   }, [mode, selected, scale]);
 
   const onDragStart = (id) => (e) => {
@@ -348,8 +332,8 @@ function FilmFormatVisualizer() {
   const rowsForCanvas = Math.max(1, Math.ceil(selected.length / colsForCanvas));
   const posBounds = useMemo(() => {
     let maxX = 0, maxY = 0;
-    for (const id of Object.keys(positions)) {
-      const p = positions[id];
+    for (const fmt of selected) {
+      const p = positions[fmt.id];
       if (!p) continue;
       maxX = Math.max(maxX, p.x);
       maxY = Math.max(maxY, p.y);
@@ -500,22 +484,7 @@ function FilmFormatVisualizer() {
           </div>
         ) : (
           <div className="relative w-full overflow-auto border rounded-xl p-4 bg-white min-h-[420px]" ref={interactiveRef}>
-            {/* Hidden ghost grid to measure Grid layout positions */}
-            <div
-              ref={ghostGridRef}
-              style={{ position: 'absolute', visibility: 'hidden', pointerEvents: 'none', inset: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', columnGap: '1rem', rowGap: '0.5rem' }}
-            >
-              {selected.map((fmt) => (
-                <div key={`ghost-${fmt.id}`} className="flex flex-col items-center gap-2 p-2 bg-white/80 rounded-lg border shadow-sm">
-                  <FilmFrame fmt={fmt} scale={scale} showFilmStock={showFilmStock} showPerfs={showPerfs} />
-                  <div className="text-center text-xs text-stone-600 max-w-[220px]">
-                    <div className="font-medium text-stone-800">{fmt.label}</div>
-                    <div>{fmt.imageMm.w.toFixed(2)} × {fmt.imageMm.h.toFixed(2)} mm (<Aspect w={fmt.imageMm.w} h={fmt.imageMm.h} />)</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="relative" style={{ width: Math.max(ghostSize.w + 32, colsForCanvas * STEP_X + 100, posBounds.w + 100), height: Math.max(ghostSize.h + 32, rowsForCanvas * STEP_Y + 100, posBounds.h + 100) }}>
+            <div className="relative" style={{ width: Math.max(colsForCanvas * STEP_X + 100, posBounds.w + 100), height: Math.max(rowsForCanvas * STEP_Y + 100, posBounds.h + 100) }}>
               {selected.map((fmt) => {
                 const pos = positions[fmt.id] || { x: 0, y: 0 };
                 return (
