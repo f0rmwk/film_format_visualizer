@@ -42,7 +42,7 @@ Live demo: https://f0rmwk.github.io/film_format_visualizer/
 
 - No build step; uses React 18, ReactDOM, and Tailwind via CDNs
 - JSX transpiled in‑browser using Babel Standalone
-- Main component: `film_format_overlay_visualizer_interactive.jsx`
+- Main component: `film_format_visualizer_interactive.jsx`
 
 ## Notes
 

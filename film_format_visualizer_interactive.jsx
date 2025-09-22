@@ -48,7 +48,7 @@ function Aspect({ w, h }) {
   return <span className="tabular-nums">{r}:1</span>;
 }
 
-function FilmOverlayVisualizer() {
+function FilmFormatVisualizer() {
   const [formats, setFormats] = useState([...BASE_FORMATS, ...EXTRA_FORMATS]);
   const [activeIds, setActiveIds] = useState([...BASE_FORMATS, ...EXTRA_FORMATS].map((f) => f.id));
   const [scale, setScale] = useState(3); // px per mm (default 3)
@@ -396,4 +396,4 @@ function FilmOverlayVisualizer() {
 }
 
 // Expose globally for mounting without a bundler
-window.FilmOverlayVisualizer = FilmOverlayVisualizer;
+window.FilmFormatVisualizer = FilmFormatVisualizer;
