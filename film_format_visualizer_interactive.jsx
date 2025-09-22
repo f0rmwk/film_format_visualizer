@@ -602,7 +602,7 @@ function FilmFormatVisualizer() {
       </div>
 
       {/* Notes (moved out of details so always visible) */}
-      <div className="col-span-12 border rounded-2xl p-4 bg-white shadow-sm order-50">
+      <div className="col-span-12 border rounded-2xl p-4 bg-white shadow-sm order-last">
         <h2 className="text-lg font-semibold mb-2">Notes</h2>
         <div className="text-xs text-stone-500 leading-relaxed">
           <p><strong>Legend & caveats:</strong> Gate sizes are typical camera/negative image areas. Projection and blow‑up apertures differ. Perforations shown are schematic (count & orientation) rather than exact pitch or profile (BH, KS, IMAX). Perfs indicate count/orientation and may not align exactly with gates or film edges.</p>
@@ -613,11 +613,11 @@ function FilmFormatVisualizer() {
 
       {/* Editable table (collapsible) */}
       {detailsCollapsed ? (
-        <div className="col-span-12 order-50">
+        <div className="col-span-12 order-last">
           <button onClick={() => setDetailsCollapsed(false)} className="px-3 py-1 border rounded-md">Show format details</button>
         </div>
       ) : (
-        <div className="col-span-12 border rounded-2xl p-4 bg-white shadow-sm order-50">
+        <div className="col-span-12 border rounded-2xl p-4 bg-white shadow-sm order-last">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold">Format Details & Edits</h2>
             <div className="flex gap-2">

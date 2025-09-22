@@ -511,7 +511,7 @@
             </div>
 
             {/* Notes (always visible) */}
-            <div className="col-span-12 border rounded-2xl p-4 bg-white shadow-sm order-50">
+            <div className="col-span-12 border rounded-2xl p-4 bg-white shadow-sm order-last">
               <h2 className="text-lg font-semibold mb-2">Notes</h2>
               <div className="text-xs text-stone-500 leading-relaxed">
                 <p><strong>Legend & caveats:</strong> Gate sizes are typical camera/negative image areas. Projection and blow‑up apertures differ. Perforations shown are schematic (count & orientation) rather than exact pitch or profile (BH, KS, IMAX). Perfs indicate count/orientation and may not align exactly with gates or film edges.</p>
@@ -521,11 +521,11 @@
             </div>
 
             {detailsCollapsed ? (
-              <div className="col-span-12 order-50">
+              <div className="col-span-12 order-last">
                 <button onClick={() => setDetailsCollapsed(false)} className="px-3 py-1 border rounded-md">Show format details</button>
               </div>
             ) : (
-              <div className="col-span-12 border rounded-2xl p-4 bg-white shadow-sm order-50">
+              <div className="col-span-12 border rounded-2xl p-4 bg-white shadow-sm order-last">
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-semibold">Format Details & Edits</h2>
                   <div className="flex gap-2">
@@ -585,26 +585,3 @@
     </script>
   </body>
   </html>
-        useEffect(() => {
-          const updateMobile = () => setIsMobile(window.innerWidth < 768);
-          updateMobile();
-          window.addEventListener('resize', updateMobile);
-          return () => window.removeEventListener('resize', updateMobile);
-        }, []);
-
-        // Auto-fit scale on mobile in Interactive mode
-        useEffect(() => {
-          if (!isMobile || mode !== 'interactive') { setFitScale(null); return; }
-          const container = interactiveRef.current;
-          const cw = container ? container.clientWidth : window.innerWidth;
-          if (!cw) return;
-          const getFilmWidthMm = (fmt) => {
-            const sideMargin = Math.max((fmt.gaugeMm - fmt.imageMm.w) / 2, fmt.gaugeMm * 0.08);
-            return fmt.orientation === 'vertical' ? fmt.gaugeMm : fmt.imageMm.w + sideMargin * 2;
-          };
-          let maxMm = 0; selected.forEach((fmt) => { maxMm = Math.max(maxMm, getFilmWidthMm(fmt)); });
-          if (maxMm <= 0) return;
-          const paddingPx = 24 + 16;
-          const s = Math.min(scale, Math.max(1, (cw - paddingPx) / maxMm));
-          setFitScale(s);
-        }, [isMobile, mode, selected, scale]);
