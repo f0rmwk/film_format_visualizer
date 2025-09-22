@@ -61,6 +61,9 @@ function FilmFormatVisualizer() {
   const [sortOverlay, setSortOverlay] = useState("large-top"); // none | small-top | large-top (default large-top)
   const [detailsCollapsed, setDetailsCollapsed] = useState(true); // collapse Format Details by default
   const overlayScrollRef = useRef(null);
+  const interactiveRef = useRef(null);
+  const dragStateRef = useRef(null);
+  const [positions, setPositions] = useState({}); // id -> {x, y}
 
   const selected = useMemo(() => formats.filter((f) => activeIds.includes(f.id)), [formats, activeIds]);
 
@@ -92,6 +95,65 @@ function FilmFormatVisualizer() {
       el.scrollTop = targetTop;
     });
   }, [mode, scale, maxGate.w, maxGate.h, controlsCollapsed, selectedSorted.length]);
+
+  // Initialize simple tiled layout when entering interactive mode or selection changes
+  useEffect(() => {
+    if (mode !== "interactive") return;
+    setPositions((prev) => {
+      const next = { ...prev };
+      let i = 0;
+      for (const fmt of selected) {
+        if (!(fmt.id in next)) {
+          const col = i % 3;
+          const row = Math.floor(i / 3);
+          next[fmt.id] = { x: col * 260, y: row * 220 };
+        }
+        i++;
+      }
+      const keep = new Set(selected.map((f) => f.id));
+      for (const k of Object.keys(next)) if (!keep.has(k)) delete next[k];
+      return next;
+    });
+  }, [mode, selected]);
+
+  const onDragStart = (id) => (e) => {
+    if (mode !== "interactive") return;
+    const container = interactiveRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const clientX = e.clientX ?? (e.touches && e.touches[0]?.clientX);
+    const clientY = e.clientY ?? (e.touches && e.touches[0]?.clientY);
+    if (clientX == null || clientY == null) return;
+    const pos = positions[id] || { x: 0, y: 0 };
+    dragStateRef.current = {
+      id,
+      offsetX: clientX - (rect.left + pos.x),
+      offsetY: clientY - (rect.top + pos.y),
+    };
+    window.addEventListener("pointermove", onDragMove);
+    window.addEventListener("pointerup", onDragEnd, { once: true });
+  };
+
+  const onDragMove = (e) => {
+    const s = dragStateRef.current;
+    if (!s) return;
+    const container = interactiveRef.current;
+    if (!container) return;
+    const rect = container.getBoundingClientRect();
+    const clientX = e.clientX;
+    const clientY = e.clientY;
+    if (clientX == null || clientY == null) return;
+    let x = clientX - rect.left - s.offsetX;
+    let y = clientY - rect.top - s.offsetY;
+    x = Math.max(0, x);
+    y = Math.max(0, y);
+    setPositions((prev) => ({ ...prev, [s.id]: { x, y } }));
+  };
+
+  const onDragEnd = () => {
+    window.removeEventListener("pointermove", onDragMove);
+    dragStateRef.current = null;
+  };
 
   const handleToggle = (id) => {
     setActiveIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
@@ -258,6 +320,7 @@ function FilmFormatVisualizer() {
           <div className="mb-4 flex gap-2">
             <button onClick={() => setMode("overlay")} className={`px-3 py-1 rounded-md border ${mode === "overlay" ? "bg-black text-white" : "bg-white"}`}>Overlay</button>
             <button onClick={() => setMode("grid")} className={`px-3 py-1 rounded-md border ${mode === "grid" ? "bg-black text-white" : "bg-white"}`}>Grid</button>
+            <button onClick={() => setMode("interactive")} className={`px-3 py-1 rounded-md border ${mode === "interactive" ? "bg-black text-white" : "bg-white"}`}>Interactive</button>
           </div>
 
           {/* Formats list */}
@@ -299,7 +362,7 @@ function FilmFormatVisualizer() {
 
       {/* Visualizer */}
       <div className={`col-span-12 ${controlsCollapsed ? "md:col-span-12" : "md:col-span-7 lg:col-span-8"} min-w-0 border rounded-2xl p-4 bg-white shadow-sm`}>
-        <h2 className="text-lg font-semibold mb-4">Visualizer</h2>
+        <h2 className="text-lg font-semibold mb-4">{mode === 'interactive' ? 'Interactive Grid' : 'Visualizer'}</h2>
         {mode === "overlay" ? (
           <div ref={overlayScrollRef} className="relative w-full overflow-auto border rounded-xl p-4 bg-white min-h-[320px]">
             <div className="relative" style={{ width: Math.max(320, maxGate.w * scale + 48), height: Math.max(240, maxGate.h * scale + 48) }}>
@@ -312,7 +375,7 @@ function FilmFormatVisualizer() {
               </div>
             </div>
           </div>
-        ) : (
+        ) : (mode === "grid" ? (
           <div className="w-full overflow-auto" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem' }}>
             {selected.map((fmt) => (
               <div key={fmt.id} className="flex flex-col items-center gap-2">
@@ -325,7 +388,31 @@ function FilmFormatVisualizer() {
               </div>
             ))}
           </div>
-        )}
+        ) : (
+          <div className="relative w-full overflow-auto border rounded-xl p-4 bg-white min-h-[420px]" ref={interactiveRef}>
+            <div className="relative" style={{ width: Math.max(800, selected.length ? 780 : 800), height: Math.max(500, 200 + Math.ceil(selected.length / 3) * 240) }}>
+              {selected.map((fmt) => {
+                const pos = positions[fmt.id] || { x: 0, y: 0 };
+                return (
+                  <div
+                    key={fmt.id}
+                    className="absolute select-none"
+                    style={{ left: pos.x, top: pos.y, cursor: 'grab' }}
+                    onPointerDown={onDragStart(fmt.id)}
+                  >
+                    <div className="flex flex-col items-center gap-2 p-2 bg-white/80 rounded-lg border shadow-sm">
+                      <FilmFrame fmt={fmt} scale={scale} showFilmStock={showFilmStock} showPerfs={showPerfs} />
+                      <div className="text-center text-xs text-stone-600 max-w-[220px]">
+                        <div className="font-medium text-stone-800">{fmt.label}</div>
+                        <div>{fmt.imageMm.w.toFixed(2)} × {fmt.imageMm.h.toFixed(2)} mm (<Aspect w={fmt.imageMm.w} h={fmt.imageMm.h} />)</div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Notes (moved out of details so always visible) */}
