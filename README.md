@@ -4,6 +4,15 @@ Interactive visualizer comparing common motion‑picture film formats. Explore n
 
 Live demo: https://f0rmwk.github.io/film_format_visualizer/
 
+## Preview
+
+![Grid view preview](assets/grid-view.png)
+![Overlay view preview](assets/overlay-view.png)
+
+Animated demo (GIF):
+
+![Interactive demo](assets/demo.gif)
+
 ## Features
 
 - Overlay and Grid views to compare formats
