@@ -6,8 +6,12 @@ Live demo: https://f0rmwk.github.io/film_format_visualizer/
 
 ## Preview
 
-![Grid view preview](assets/grid-view.png)
-![Overlay view preview](assets/overlay-view.png)
+<p align="center">
+  <img src="assets/grid-view.png" alt="Grid view preview" width="50%" />
+</p>
+<p align="center">
+  <img src="assets/overlay-view.png" alt="Overlay view preview" width="50%" />
+</p>
 
 ## Features
 
