@@ -184,21 +184,29 @@ function FilmFormatVisualizer() {
     const container = interactiveRef.current;
     if (!container) return;
     const rect = container.getBoundingClientRect();
-    const clientX = e.clientX ?? (e.touches && e.touches[0]?.clientX);
-    const clientY = e.clientY ?? (e.touches && e.touches[0]?.clientY);
+    const isTouch = e.type === 'touchstart' || (typeof TouchEvent !== 'undefined' && e instanceof TouchEvent);
+    const clientX = isTouch ? (e.touches && e.touches[0]?.clientX) : e.clientX;
+    const clientY = isTouch ? (e.touches && e.touches[0]?.clientY) : e.clientY;
     if (clientX == null || clientY == null) return;
     const pos = positions[id] || { x: 0, y: 0 };
     dragStateRef.current = {
       id,
       offsetX: clientX - (rect.left + pos.x),
       offsetY: clientY - (rect.top + pos.y),
+      isTouch,
     };
     // Bring to front
     const nextZ = (zCounterRef.current || 1) + 1;
     zCounterRef.current = nextZ;
     setZIndexMap((prev) => ({ ...prev, [id]: nextZ }));
-    window.addEventListener("pointermove", onDragMove);
-    window.addEventListener("pointerup", onDragEnd, { once: true });
+    if (isTouch) {
+      window.addEventListener('touchmove', onDragMove, { passive: false });
+      window.addEventListener('touchend', onDragEnd, { once: true });
+      window.addEventListener('touchcancel', onDragEnd, { once: true });
+    } else {
+      window.addEventListener("pointermove", onDragMove);
+      window.addEventListener("pointerup", onDragEnd, { once: true });
+    }
   };
 
   const onDragMove = (e) => {
@@ -207,18 +215,25 @@ function FilmFormatVisualizer() {
     const container = interactiveRef.current;
     if (!container) return;
     const rect = container.getBoundingClientRect();
-    const clientX = e.clientX;
-    const clientY = e.clientY;
+    const isTouch = s.isTouch || e.type === 'touchmove';
+    const clientX = isTouch ? (e.touches && e.touches[0]?.clientX) : e.clientX;
+    const clientY = isTouch ? (e.touches && e.touches[0]?.clientY) : e.clientY;
     if (clientX == null || clientY == null) return;
     let x = clientX - rect.left - s.offsetX;
     let y = clientY - rect.top - s.offsetY;
     x = Math.max(0, x);
     y = Math.max(0, y);
     setPositions((prev) => ({ ...prev, [s.id]: { x, y } }));
+    if (e.cancelable) e.preventDefault();
   };
 
   const onDragEnd = () => {
-    window.removeEventListener("pointermove", onDragMove);
+    const s = dragStateRef.current;
+    if (s?.isTouch) {
+      window.removeEventListener('touchmove', onDragMove);
+    } else {
+      window.removeEventListener("pointermove", onDragMove);
+    }
     dragStateRef.current = null;
   };
 
@@ -483,7 +498,7 @@ function FilmFormatVisualizer() {
             ))}
           </div>
         ) : (
-          <div className="relative w-full overflow-auto border rounded-xl p-4 bg-white" ref={interactiveRef}>
+          <div className="relative w-full overflow-auto border rounded-xl p-4 bg-white" ref={interactiveRef} style={{ touchAction: 'none' }}>
             <div className="relative" style={{ width: Math.max(320, posBounds.w + 24), height: Math.max(240, posBounds.h + 24) }}>
               {selected.map((fmt) => {
                 const pos = positions[fmt.id] || { x: 0, y: 0 };
@@ -491,8 +506,9 @@ function FilmFormatVisualizer() {
                   <div
                     key={fmt.id}
                     className="absolute select-none"
-                    style={{ left: pos.x, top: pos.y, cursor: 'grab', zIndex: zIndexMap[fmt.id] || 1 }}
+                    style={{ left: pos.x, top: pos.y, cursor: 'grab', zIndex: zIndexMap[fmt.id] || 1, touchAction: 'none' }}
                     onPointerDown={onDragStart(fmt.id)}
+                    onTouchStart={onDragStart(fmt.id)}
                   >
                     <div className="flex flex-col items-center gap-2 p-2 bg-white/80 rounded-lg border shadow-sm" style={{ opacity: interactiveOpacity }}>
                       <FilmFrame fmt={fmt} scale={scale} showFilmStock={showFilmStock} showPerfs={showPerfs} fillOverride={interactiveOpacity} />

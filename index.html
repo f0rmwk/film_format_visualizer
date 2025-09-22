@@ -465,7 +465,7 @@
                   ))}
                 </div>
               ) : (
-                <div className="relative w-full overflow-auto border rounded-xl p-4 bg-white" ref={interactiveRef}>
+                <div className="relative w-full overflow-auto border rounded-xl p-4 bg-white" ref={interactiveRef} style={{ touchAction: 'none' }}>
                   <div className="relative" style={{ width: (() => { let maxX=0; selected.forEach(fmt => { const p=positions[fmt.id]; if (p) maxX=Math.max(maxX,p.x);}); return Math.max(320, maxX + STEP_X + 24); })(), height: (() => { let maxY=0; selected.forEach(fmt => { const p=positions[fmt.id]; if (p) maxY=Math.max(maxY,p.y);}); return Math.max(240, maxY + STEP_Y + 24); })() }}>
                     {selected.map((fmt) => {
                       const pos = positions[fmt.id] || { x: 0, y: 0 };
@@ -473,8 +473,9 @@
                         <div
                           key={fmt.id}
                           className="absolute select-none"
-                          style={{ left: pos.x, top: pos.y, cursor: 'grab', zIndex: (zIndexMap[fmt.id] || 1) }}
+                          style={{ left: pos.x, top: pos.y, cursor: 'grab', zIndex: (zIndexMap[fmt.id] || 1), touchAction: 'none' }}
                           onPointerDown={onDragStart(fmt.id)}
+                          onTouchStart={onDragStart(fmt.id)}
                         >
                           <div className="flex flex-col items-center gap-2 p-2 bg-white/80 rounded-lg border shadow-sm" style={{ opacity: interactiveOpacity }}>
                             <FilmFrame fmt={fmt} scale={scale} showFilmStock={showFilmStock} showPerfs={showPerfs} fillOverride={interactiveOpacity} />
