@@ -68,6 +68,8 @@ function FilmFormatVisualizer() {
   const zCounterRef = useRef(1);
   const [zIndexMap, setZIndexMap] = useState({}); // id -> zIndex
   const [interactiveCols, setInteractiveCols] = useState(3);
+  const STEP_X = 260; // approx card width + gap
+  const STEP_Y = 240; // approx card height + gap
 
   const selected = useMemo(() => formats.filter((f) => activeIds.includes(f.id)), [formats, activeIds]);
 
@@ -100,12 +102,31 @@ function FilmFormatVisualizer() {
     });
   }, [mode, scale, maxGate.w, maxGate.h, controlsCollapsed, selectedSorted.length]);
 
+  const resetInteractiveLayout = () => {
+    const container = interactiveRef.current;
+    let cols = 3;
+    if (container && container.clientWidth) {
+      cols = Math.max(1, Math.floor((container.clientWidth - 16) / STEP_X));
+    }
+    setInteractiveCols(cols);
+    setPositions(() => {
+      const next = {};
+      let i = 0;
+      for (const fmt of selected) {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        next[fmt.id] = { x: col * STEP_X, y: row * STEP_Y };
+        i++;
+      }
+      return next;
+    });
+  };
+
   // Initialize tiled layout (matching Grid flow) when entering interactive mode or selection changes
   useEffect(() => {
     if (mode !== "interactive") return;
+    // Only place new items; keep existing positions
     const container = interactiveRef.current;
-    const STEP_X = 260; // approx card width + gap
-    const STEP_Y = 240; // approx card height + gap
     let cols = 3;
     if (container && container.clientWidth) {
       cols = Math.max(1, Math.floor((container.clientWidth - 16) / STEP_X));
@@ -349,6 +370,9 @@ function FilmFormatVisualizer() {
               <div className="flex items-center gap-3">
                 <input id="interactiveFill" type="range" min={0} max={0.9} step={0.01} value={interactiveOpacity} onChange={(e) => setInteractiveOpacity(parseFloat(e.target.value))} className="w-full" />
                 <span className="w-14 text-right tabular-nums">{interactiveOpacity.toFixed(2)}</span>
+              </div>
+              <div className="mt-2">
+                <button className="px-3 py-1 text-sm border rounded-md" onClick={resetInteractiveLayout}>Reset layout</button>
               </div>
             </div>
           )}
