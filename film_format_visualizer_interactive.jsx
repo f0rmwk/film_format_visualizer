@@ -67,6 +67,7 @@ function FilmFormatVisualizer() {
   const [interactiveOpacity, setInteractiveOpacity] = useState(0.7);
   const zCounterRef = useRef(1);
   const [zIndexMap, setZIndexMap] = useState({}); // id -> zIndex
+  const [interactiveCols, setInteractiveCols] = useState(3);
 
   const selected = useMemo(() => formats.filter((f) => activeIds.includes(f.id)), [formats, activeIds]);
 
@@ -99,17 +100,25 @@ function FilmFormatVisualizer() {
     });
   }, [mode, scale, maxGate.w, maxGate.h, controlsCollapsed, selectedSorted.length]);
 
-  // Initialize simple tiled layout when entering interactive mode or selection changes
+  // Initialize tiled layout (matching Grid flow) when entering interactive mode or selection changes
   useEffect(() => {
     if (mode !== "interactive") return;
+    const container = interactiveRef.current;
+    const STEP_X = 260; // approx card width + gap
+    const STEP_Y = 240; // approx card height + gap
+    let cols = 3;
+    if (container && container.clientWidth) {
+      cols = Math.max(1, Math.floor((container.clientWidth - 16) / STEP_X));
+    }
+    setInteractiveCols(cols);
     setPositions((prev) => {
       const next = { ...prev };
       let i = 0;
       for (const fmt of selected) {
         if (!(fmt.id in next)) {
-          const col = i % 3;
-          const row = Math.floor(i / 3);
-          next[fmt.id] = { x: col * 260, y: row * 220 };
+          const col = i % cols;
+          const row = Math.floor(i / cols);
+          next[fmt.id] = { x: col * STEP_X, y: row * STEP_Y };
         }
         i++;
       }
@@ -267,6 +276,10 @@ function FilmFormatVisualizer() {
     );
   }
 
+  // Derive canvas size for Interactive mode
+  const colsForCanvas = interactiveCols || 3;
+  const rowsForCanvas = Math.max(1, Math.ceil(selected.length / colsForCanvas));
+
   return (
     <div className="p-6 grid gap-6 md:grid-cols-12">
       {/* Controls (collapsible) */}
@@ -407,7 +420,7 @@ function FilmFormatVisualizer() {
           </div>
         ) : (
           <div className="relative w-full overflow-auto border rounded-xl p-4 bg-white min-h-[420px]" ref={interactiveRef}>
-            <div className="relative" style={{ width: Math.max(800, selected.length ? 780 : 800), height: Math.max(500, 200 + Math.ceil(selected.length / 3) * 240) }}>
+            <div className="relative" style={{ width: Math.max(800, colsForCanvas * 260 + 100), height: Math.max(500, rowsForCanvas * 240 + 100) }}>
               {selected.map((fmt) => {
                 const pos = positions[fmt.id] || { x: 0, y: 0 };
                 return (
